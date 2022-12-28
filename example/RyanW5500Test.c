@@ -107,7 +107,7 @@ void *deal_client_fun(void *arg)
 {
 
     int fd = *(int *)arg; // 通过arg获得已连接套接字
-    char buf[256] = {0};
+    char buf[512] = {0};
 
     // struct timeval tv = {
     //     .tv_sec = 2,
@@ -202,7 +202,7 @@ void udpEchoServiceTask(void *argument)
     // 定义一个IPv4地址结构  存放发送者的数据
     struct sockaddr_in from_addr;
     socklen_t fromLen = sizeof(from_addr);
-    char buf[256] = {0};
+    char buf[512] = {0};
 
     while (1)
     {
@@ -258,7 +258,7 @@ void multicastEchoServiceTask(void *argument)
 
     struct sockaddr_in from_addr = {0};
     socklen_t fromLen = sizeof(from_addr);
-    char buf[256] = {0};
+    char buf[512] = {0};
 
     while (1)
     {
