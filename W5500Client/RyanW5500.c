@@ -65,7 +65,6 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
     // nedev用户手动设置了ip / gw / mask / dnsService
     if (RyanW5500Entry.netDevFlag & netDevSetDevInfo)
     {
-
         RyanW5500Entry.netDevFlag &= ~netDevSetDevInfo;
         for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
             wiz_closesocket(socket);
@@ -241,6 +240,12 @@ static void wizIntDataTask(void *parameter)
     }
 }
 
+/**
+ * @brief 初始化W5500 不应重复调用,内部没有判断
+ *
+ * @param netInfo
+ * @return int
+ */
 int RyanW5500Init(wiz_NetInfo *netInfo)
 {
 
@@ -254,13 +259,12 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
     reg_wizchip_spi_cbfunc(RyanW5500ReadByte, RyanW5500WriteByte);          // 注册读写函数
     reg_wizchip_spiburst_cbfunc(RyanW5500ReadBurst, RyanW5500WriteBurst);   // 注册多个字节读写
 
-    RyanW5500AttachIRQ(RyanW5500IRQCallback); // 绑定w5500中断回调函数
-
     RyanW5500Reset(); // 重启w5500
 
     RyanW5500Entry.W5500SpiMutexHandle = rt_mutex_create("RyanW5500SpiMutex", RT_IPC_FLAG_FIFO);
     RyanW5500Entry.socketMutexHandle = rt_mutex_create("RyanW5500SocketMutex", RT_IPC_FLAG_FIFO);
     RyanW5500Entry.W5500EventHandle = rt_event_create("RyanW5500Event", RT_IPC_FLAG_PRIO);
+    RyanW5500AttachIRQ(RyanW5500IRQCallback); // 绑定w5500中断回调函数
 
     // 超时中断触发为retry_cnt * time_100us * 100us
     struct wiz_NetTimeout_t net_timeout = {
@@ -270,11 +274,15 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
 
     // 检查w5500连接是否正常
     memset(&net_timeout, 0, sizeof(struct wiz_NetTimeout_t));
-    ctlnetwork(CN_GET_TIMEOUT, (void *)&net_timeout);
-    if (0 == net_timeout.retry_cnt || 0 == net_timeout.time_100us)
+
+    while (1)
     {
+        ctlnetwork(CN_GET_TIMEOUT, (void *)&net_timeout);
+        if (0 != net_timeout.retry_cnt || 0 != net_timeout.time_100us)
+            break;
+
         LOG_E("Wiznet chip not detected");
-        return -1;
+        delay(1000);
     }
 
     netdev = RyanW5500NetdevRegister("RyanW5500"); // W5500
