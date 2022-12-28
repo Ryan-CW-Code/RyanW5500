@@ -1,6 +1,7 @@
 
 
 #include <stdio.h>
+#include <stdint.h>
 #include <board.h>
 #include <rtthread.h>
 #include <rtdevice.h>
@@ -8,11 +9,7 @@
 #include "drv_spi.h"
 
 static struct rt_spi_device *RyanW5500SpiDevice = NULL;
-#define RyanW5500SpiDeviceName RYANW5500_SPI_DEVICE
 #define RyanW5500SpiFreqMax (40 * 1000 * 1000)
-
-#define RyanW5500ResetGpio RYANW5500_RST_PIN
-#define RyanW5500IRQGpio RYANW5500_IRQ_PIN
 
 /**
  * @brief SPI 初始化
@@ -20,12 +17,10 @@ static struct rt_spi_device *RyanW5500SpiDevice = NULL;
  */
 int RyanW5500SpiInit()
 {
-    rt_hw_spi_device_attach("spi2", RyanW5500SpiDeviceName, GPIOE, GPIO_PIN_15);
-
-    RyanW5500SpiDevice = rt_device_find(RyanW5500SpiDeviceName);
+    RyanW5500SpiDevice = rt_device_find(RYANW5500_SPI_DEVICE);
     if (RyanW5500SpiDevice == NULL)
     {
-        LOG_E("You should attach [%s] into SPI bus firstly.", RyanW5500SpiDeviceName);
+        LOG_E("You should attach [%s] into SPI bus firstly.", RYANW5500_SPI_DEVICE);
         return RT_ERROR;
     }
 
@@ -38,7 +33,7 @@ int RyanW5500SpiInit()
 
     if (rt_device_open(RyanW5500SpiDevice, RT_DEVICE_OFLAG_RDWR) != RT_EOK)
     {
-        LOG_E("open WIZnet SPI device %s error.", RyanW5500SpiDeviceName);
+        LOG_E("open WIZnet SPI device %s error.", RYANW5500_SPI_DEVICE);
         return RT_ERROR;
     }
 
@@ -131,12 +126,12 @@ void RyanW5500CsDeselect(void)
  */
 void RyanW5500Reset(void)
 {
-    rt_pin_mode(RyanW5500ResetGpio, PIN_MODE_OUTPUT); // 设置重启引脚电平
+    rt_pin_mode(RYANW5500_RST_PIN, PIN_MODE_OUTPUT); // 设置重启引脚电平
 
-    rt_pin_write(RyanW5500ResetGpio, PIN_LOW);
+    rt_pin_write(RYANW5500_RST_PIN, PIN_LOW);
     rt_thread_mdelay(2);
 
-    rt_pin_write(RyanW5500ResetGpio, PIN_HIGH);
+    rt_pin_write(RYANW5500_RST_PIN, PIN_HIGH);
     rt_thread_mdelay(2);
 }
 
@@ -147,7 +142,7 @@ void RyanW5500Reset(void)
  */
 void RyanW5500AttachIRQ(void (*RyanW5500IRQCallback)(void *argument))
 {
-    rt_pin_mode(RyanW5500IRQGpio, PIN_MODE_INPUT); // 初始化中断引脚
-    rt_pin_attach_irq(RyanW5500IRQGpio, PIN_IRQ_MODE_FALLING, RyanW5500IRQCallback, NULL);
-    rt_pin_irq_enable(RyanW5500IRQGpio, PIN_IRQ_ENABLE);
+    rt_pin_mode(RYANW5500_IRQ_PIN, PIN_MODE_INPUT); // 初始化中断引脚
+    rt_pin_attach_irq(RYANW5500_IRQ_PIN, PIN_IRQ_MODE_FALLING, RyanW5500IRQCallback, NULL);
+    rt_pin_irq_enable(RYANW5500_IRQ_PIN, PIN_IRQ_ENABLE);
 }
