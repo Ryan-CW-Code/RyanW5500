@@ -3,6 +3,7 @@
 #define __RyanW5500__
 
 #include "wizchip_conf.h"
+#include "wizchip_dhcp.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -10,13 +11,11 @@ extern "C"
 #endif
 
     // 定义枚举类型
-    extern dhcp_mode;
 
     // 定义结构体类型
-    extern wiz_NetInfo;
 
     /* extern variables-----------------------------------------------------------*/
-    extern void RyanW5500Reset(void);
+    extern int RyanW5500Init(wiz_NetInfo *netInfo);
 
 #ifdef __cplusplus
 }

@@ -7,17 +7,25 @@ extern "C"
 {
 #endif
 
-#define DBG_ENABLE
-#define DBG_SECTION_NAME ("RyanW5500")
-#define DBG_LEVEL LOG_LVL_WARNING
-#define DBG_COLOR
-
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include "ulog.h"
+#include <ctype.h>
+#include <errno.h>
+
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <sys/errno.h>
+#include <sys/time.h>
 #include "sal.h"
+#include "sal_netdb.h"
+
+#include "netdev_ipaddr.h"
+#include "netdev.h"
+
+#include "ulog.h"
+
 #include "platformTimer.h"
 #include "platformW5500Hardware.h"
 #include "wizchip_conf.h"
@@ -28,6 +36,8 @@ extern "C"
 #include "RyanList.h"
 #include "RyanW5500.h"
 #include "RyanW5500Socket.h"
+#include "RyanW5500Ping.h"
+#include "RyanW5500netDev.h"
 
 #ifndef delay
 #define delay(ms) rt_thread_mdelay(ms)

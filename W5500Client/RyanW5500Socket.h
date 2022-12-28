@@ -23,7 +23,7 @@ extern "C"
     {
         int backlog;                   // 剩余accept连接个数
         rt_mq_t clientInfoQueueHandle; // 连接的客户端信息地址
-        RyanList_t clientList;    // 客户端的列表
+        RyanList_t clientList;         // 客户端的列表
     } RyanW5500ServiceInfo;
 
     typedef struct
@@ -33,7 +33,7 @@ extern "C"
         int8_t serviceSocket;              // 当前套接字是listen套接字客户端时，存储listen服务套接字
         uint16_t port;                     // 当前socket端口
         int socket;                        // w5500 真实socket套接字
-        uint32_t magic;                    // 
+        uint32_t magic;                    //
         uint32_t recvTimeout;              // 接收数据超时（以毫秒为单位）
         uint32_t sendTimeout;              // 等待发送超时（以毫秒为单位）
         RyanW5500SocketState_e state;      // RyanW5500 套接字的当前状态
@@ -68,8 +68,9 @@ extern "C"
     extern int wiz_getaddrinfo(const char *nodename, const char *servname, const struct addrinfo *hints, struct addrinfo **res);
     extern void wiz_freeaddrinfo(struct addrinfo *ai);
 
-
     extern RyanW5500Socket *RyanW5500GetSock(int socket); // 获取 WIZnet 套接字对象
+    extern RyanW5500Socket *RyanW5500SocketCreate(int type, int port);
+    extern void RyanListenServiceAddClient(RyanW5500Socket *serviceSock, RyanW5500Socket *clientSock);
     extern int RyanW5500RecvDataCallback(int socket);
     extern int RyanW5500CloseCallback(int socket);
 

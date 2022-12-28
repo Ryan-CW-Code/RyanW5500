@@ -1,11 +1,18 @@
-#include "RyanApplication.h"
+
+
+#include <stdio.h>
+#include <board.h>
+#include <rtthread.h>
+#include <rtdevice.h>
+#include <rtdbg.h>
+#include "drv_spi.h"
 
 static struct rt_spi_device *RyanW5500SpiDevice = NULL;
-#define RyanW5500SpiDeviceName "spi26"
+#define RyanW5500SpiDeviceName RYANW5500_SPI_DEVICE
 #define RyanW5500SpiFreqMax (40 * 1000 * 1000)
 
-#define RyanW5500ResetGpio GET_PIN(C, 0)
-#define RyanW5500IRQGpio GET_PIN(C, 1)
+#define RyanW5500ResetGpio RYANW5500_RST_PIN
+#define RyanW5500IRQGpio RYANW5500_IRQ_PIN
 
 /**
  * @brief SPI 初始化

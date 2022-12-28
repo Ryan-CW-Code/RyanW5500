@@ -95,7 +95,7 @@ extern "C"
 
 #define SOCK_OK 1        // Result is OK about socket process.
 #define SOCK_BUSY 0      // Socket is busy on processing the operation. Valid only Non-block IO Mode.
-#define SOCK_FATAL -1000 // Result is fatal error about socket process.
+#define SOCK_FATAL -100 // Result is fatal error about socket process.
 
 #define SOCK_ERROR 0
 #define SOCKERR_SOCKNUM (SOCK_ERROR - 1)    // Invalid socket number

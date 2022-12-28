@@ -146,22 +146,16 @@ typedef struct
     uint8_t OPT[OPT_SIZE]; // 选项
 } RIP_MSG;
 
-uint8_t DHCP_SOCKET; // DHCP 的套接字号
-
-uint8_t DHCP_SIP[4];      // DHCP 服务器 IP 地址
-uint8_t DHCP_REAL_SIP[4]; // 用于在几个 DHCP 服务器中提取我的 DHCP 服务器
-// 来自 DHCP 服务器的网络信息
+uint8_t DHCP_SOCKET;               // DHCP 的套接字号
+uint8_t DHCP_SIP[4];               // DHCP 服务器 IP 地址
+uint8_t DHCP_REAL_SIP[4];          // 用于在几个 DHCP 服务器中提取我的 DHCP 服务器
 uint8_t OLD_allocated_ip[4] = {0}; // 以前的 IP 地址
 
 wizchipDhcpState_e dhcp_state = STATE_DHCP_INIT; // DHCP 状态
-// INFINITE_LEASETIME
-platformTimer_t dhcp_lease_time = {0};
-
-uint32_t DHCP_XID; // 任何数字
-
-RIP_MSG *pDHCPMSG; // DHCP 处理的缓冲区指针
-
-uint8_t HOST_NAME[] = DCHP_HOST_NAME;
+platformTimer_t dhcp_lease_time = {0};           // dhcp租期定时器
+uint32_t DHCP_XID;                               // 任何数字
+uint8_t *HOST_NAME = DCHP_HOST_NAME;             // 主机名
+RIP_MSG *pDHCPMSG;                               // DHCP 处理的缓冲区指针
 
 char NibbleToHex(uint8_t nibble)
 {

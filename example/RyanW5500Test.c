@@ -1,3 +1,5 @@
+
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -9,32 +11,39 @@
 #include <rtdbg.h>
 #include "ulog.h"
 #include "RyanW5500.h"
+#include "sys/socket.h"
+#include "netdb.h"
 #include "sal_socket.h"
 #include "sal_netdb.h"
 #include "netdev_ipaddr.h"
 #include "netdev.h"
 
+#ifdef PKG_USING_RYANW5500_EXAMPLE
 static const char *TAG = "RyanW5500Test";
 
-// 任务句柄
-struct netdev *ryanNetDev = NULL;
+static struct netdev *RyanNetdev = NULL;
 
 void neDevStatusChangeCallback(struct netdev *netdev, enum netdev_cb_type type)
 {
     ulog_i(TAG, "w5500 nedev state: %d", type);
 }
 
-int w5500Start(void)
+int w5500Start(int argc, char *argv[])
 {
+
+    if (NULL != RyanNetdev)
+    {
+        ulog_w(TAG, "w5500已经启动,不要重复选择");
+    }
 
     wiz_NetInfo netInfo = {0};
 
-    // mac地址有48位，6字节
-    // mac地址前3字节表示网卡制造商，由IEEE分配，称为OUI（组织唯一标识符）, 后3字节，为网卡制造商分配的唯一编号
-    // mac地址首位偶数单播，首位奇数为多播地址,多播作为设备地址是无效(第一个字节的最后一位0 单播， 1 多播)
+    // mac地址有48bit
+    // mac地址高24bit表示网卡制造商，由IEEE分配，称为OUI（组织唯一标识符）, 低24bit为网卡制造商分配的唯一编号
+    // mac地址首位偶数单播，首位奇数为多播地址,多播作为设备地址是无效(第48bit 0 单播， 1 多播)
     // 广播mac地址:FF-FF-FF-FF-FF-FF
-    // 第一个字节一般为00，这里就不使用00 狗头
-    uint8_t myMac[6] = {0x14, 0xE0, 0x81, 0x2f, 0x0c, 0x37};
+    // 第一个字节一般为00
+    uint8_t myMac[6] = {0x00, 0x08, 0xdc, 0x2f, 0x0c, 0x37};
 
     // stm32可以使用唯一96Bit芯片序列号
     // myMac[3] = *(uint8_t *)(UID_BASE + 0);
@@ -67,24 +76,30 @@ int w5500Start(void)
 
     netInfo.dhcp = NETINFO_DHCP; // 使能dhcp
 
-    RyanW5500Init(&netInfo);
-
-    ryanNetDev = netdev_get_by_name("RyanW5500"); // netdev
-    if (ryanNetDev == NULL)
+    if (0 != RyanW5500Init(&netInfo)) // 初始化w5500并启动
     {
-        ulog_e(TAG, "No device found");
-        return;
+        ulog_e(TAG, "初始化w5500错误");
+        return -1;
     }
 
-    netdev_set_default(ryanNetDev);
-    netdev_set_status_callback(ryanNetDev, neDevStatusChangeCallback);
+    RyanNetdev = netdev_get_by_name("RyanW5500"); // netdev
+    if (NULL == RyanNetdev)
+    {
+        ulog_e(TAG, "No device found");
+        return -1;
+    }
 
-    // while (!netdev_is_link_up(ryanNetDev))
+    netdev_set_default(RyanNetdev);
+    netdev_set_status_callback(RyanNetdev, neDevStatusChangeCallback);
+
+    ulog_i(TAG, "w5500 启动成功");
+
+    // while (!netdev_is_link_up(RyanNetdev))
     // {
     //     delay(200);
     // }
 
-    return RT_EOK;
+    return 0;
 }
 
 // TCP并发ECHO服务器
@@ -106,21 +121,20 @@ void *deal_client_fun(void *arg)
         int len = recv(fd, buf, sizeof(buf), 0);
         if (len <= 0)
         {
-            // 下列3种表示没问题,但需要推出发送
             if ((errno == EAGAIN ||      // 套接字已标记为非阻塞，而接收操作被阻塞或者接收超时
                  errno == EWOULDBLOCK || // 发送时套接字发送缓冲区已满，或接收时套接字接收缓冲区为空
                  errno == EINTR))        // 操作被信号中断
             {
-                ulog_i(TAG, "接收超时...........");
+                ulog_w(TAG, "接收超时...........");
                 continue;
             }
 
-            ulog_w(TAG, "遇到错误, 退出 socket: %d, len: %d", fd, len);
+            ulog_e(TAG, "遇到错误, 退出 socket: %d, len: %d", fd, len);
             close(fd);
             return;
         }
 
-        // rt_kprintf("客户端的请求为:%s recv:%d\n", buf, len);
+        // rt_kprintf("客户端的请求为:%s recv:%d", buf, len);
         send(fd, buf, len, 0); // 回应客户端
     }
 }
@@ -129,8 +143,6 @@ void tcpEchoTask(void *argument)
 {
     int32_t port = (int32_t)argument;
 
-    int32_t ret;
-    uint16_t size = 0, sentsize = 0;
     while (1)
     {
 
@@ -158,7 +170,7 @@ void tcpEchoTask(void *argument)
                 break;
 
             // new_fd代表的是客户端的连接   cli_addr存储是客户端的信息
-            rt_kprintf("客户端:%s:%hu连接了服务器\n", inet_ntoa(cli_addr.sin_addr.s_addr), ntohs(cli_addr.sin_port));
+            ulog_i(TAG, "客户端: %s, port: %hu, 连接了服务器", inet_ntoa(cli_addr.sin_addr.s_addr), ntohs(cli_addr.sin_port));
 
             rt_thread_t idex = rt_thread_create("socket123123123", deal_client_fun, (void *)&new_fd, 2048, 12, 5);
             if (idex != NULL)
@@ -176,7 +188,7 @@ void udpEchoServiceTask(void *argument)
 
     // 创建通讯的udp套接字(没有port， ip)
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    printf("UDP套接字sockfd=%d\r\n", sockfd);
+    ulog_i(TAG, "UDP套接字sockfd=%d", sockfd);
 
     // 定义一个IPv4地址结构, 存放客户端的地址信息(本地主机)
     struct sockaddr_in myAddr = {
@@ -198,21 +210,20 @@ void udpEchoServiceTask(void *argument)
                            (struct sockaddr *)&from_addr, &fromLen);
         if (len <= 0)
         {
-            // 下列3种表示没问题,但需要推出发送
             if ((errno == EAGAIN ||      // 套接字已标记为非阻塞，而接收操作被阻塞或者接收超时
                  errno == EWOULDBLOCK || // 发送时套接字发送缓冲区已满，或接收时套接字接收缓冲区为空
                  errno == EINTR))        // 操作被信号中断
             {
-                ulog_i(TAG, "接收超时...........");
+                ulog_w(TAG, "接收超时...........");
                 continue;
             }
 
-            ulog_w(TAG, "遇到错误, 退出 socket: %d, len: %d", sockfd, len);
+            ulog_e(TAG, "遇到错误, 退出 socket: %d, len: %d", sockfd, len);
             break;
         }
 
-        // printf("消息来自: %s : %hu\r\n", inet_ntoa(from_addr.sin_addr), ntohs(from_addr.sin_port));
-        // printf("len: %d msg:%s\r\n", len, buf);
+        // ulog_i(TAG, "udp echo service, 消息来自: %s, port: %hu", inet_ntoa(from_addr.sin_addr), ntohs(from_addr.sin_port));
+        // ulog_i(TAG, "udp echo service, len: %d, msg: %s", len, buf);
 
         sendto(sockfd, buf, len, 0, (struct sockaddr *)&from_addr, sizeof(from_addr));
 
@@ -240,7 +251,7 @@ void multicastEchoServiceTask(void *argument)
     // 224.0.0.1 ~ 239.255.255.254 任意一个IP地址 都代表一个多播组
     // 加入到多播组 224.0.0.252中
     struct ip_mreq mreq = {
-        .imr_multiaddr.s_addr = inet_addr("224.1.1.1"),
+        .imr_multiaddr.s_addr = inet_addr("224.0.0.252"),
         .imr_interface.s_addr = htonl(INADDR_ANY)};
 
     setsockopt(sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
@@ -256,21 +267,20 @@ void multicastEchoServiceTask(void *argument)
                            (struct sockaddr *)&from_addr, &fromLen);
         if (len <= 0)
         {
-            // 下列3种表示没问题,但需要推出发送
             if ((errno == EAGAIN ||      // 套接字已标记为非阻塞，而接收操作被阻塞或者接收超时
                  errno == EWOULDBLOCK || // 发送时套接字发送缓冲区已满，或接收时套接字接收缓冲区为空
                  errno == EINTR))        // 操作被信号中断
             {
-                ulog_i(TAG, "multicast, 接收超时...........");
+                ulog_w(TAG, "multicast, 接收超时...........");
                 continue;
             }
 
-            ulog_w(TAG, "multicast, 遇到错误, 退出 socket: %d, len: %d", sockfd, len);
+            ulog_e(TAG, "multicast, 遇到错误, 退出 socket: %d, len: %d", sockfd, len);
             break;
         }
 
-        printf("multicast, 消息来自: %s : %hu\r\n", inet_ntoa(from_addr.sin_addr), ntohs(from_addr.sin_port));
-        printf("multicast, len: %d msg: %s\r\n", len, buf);
+        ulog_i(TAG, "multicast, 消息来自: %s, port: %hu", inet_ntoa(from_addr.sin_addr), ntohs(from_addr.sin_port));
+        ulog_i(TAG, "multicast, len: %d, msg: %s", len, buf);
 
         // 默认只会发送给多播组，这是w5500硬件限制的，如果想单播回复组播收到的信息，需要重新创建socket
         // sendto(sockfd, "hellow", strlen("hellow"), 0, (struct sockaddr *)&from_addr, sizeof(from_addr));
@@ -291,31 +301,31 @@ void multicastEchoServiceTask(void *argument)
 static int w5500Static(int argc, char *argv[])
 {
     // 测试netDev
-    netdev_dhcp_enabled(ryanNetDev, RT_FALSE);
+    netdev_dhcp_enabled(RyanNetdev, RT_FALSE);
 
     //  设置网卡 IP 地址
     uint32_t addr = inet_addr("192.168.3.69");
-    netdev_set_ipaddr(ryanNetDev, (const ip_addr_t *)&addr);
+    netdev_set_ipaddr(RyanNetdev, (const ip_addr_t *)&addr);
 
     addr = inet_addr("192.168.1.1");
     //  设置网卡网关地址
-    netdev_set_gw(ryanNetDev, (const ip_addr_t *)&addr);
+    netdev_set_gw(RyanNetdev, (const ip_addr_t *)&addr);
 
     addr = inet_addr("255.255.252.0");
     //  设置网卡子网掩码地址
-    netdev_set_netmask(ryanNetDev, (const ip_addr_t *)&addr);
+    netdev_set_netmask(RyanNetdev, (const ip_addr_t *)&addr);
 
     addr = inet_addr("114.114.114.114");
     //  设置网卡子网掩码地址
-    netdev_set_dns_server(ryanNetDev, 0, (const ip_addr_t *)&addr);
-    ulog_i(TAG, "w5500Static");
+    netdev_set_dns_server(RyanNetdev, 0, (const ip_addr_t *)&addr);
+    ulog_w(TAG, "w5500Static");
     return 0;
 }
 
 static int w5500Dhcp(int argc, char *argv[])
 {
-    netdev_dhcp_enabled(ryanNetDev, RT_TRUE);
-    ulog_i(TAG, "w5500Dhcp");
+    netdev_dhcp_enabled(RyanNetdev, RT_TRUE);
+    ulog_w(TAG, "w5500Dhcp");
     return 0;
 }
 
@@ -323,7 +333,7 @@ static int w5500UdpClient(int argc, char *argv[])
 {
     if (argc < 4)
     {
-        ulog_i(TAG, "请输入udp服务器的IP, port ");
+        ulog_w(TAG, "请输入udp服务器的IP, port ");
         return 0;
     }
 
@@ -332,7 +342,7 @@ static int w5500UdpClient(int argc, char *argv[])
 
     // 创建通讯的udp套接字(没有port， ip)
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    printf("UDP套接字sockfd=%d\r\n", sockfd);
+    ulog_i(TAG, "UDP客户端套接字sockfd: %d", sockfd);
 
     // 定义一个IPv4地址结构, 存放服务器的地址信息(目标主机)
     struct sockaddr_in ser_addr = {
@@ -342,7 +352,6 @@ static int w5500UdpClient(int argc, char *argv[])
     };
 
     char buf[] = "This is a udp client test message";
-
     sendto(sockfd, buf, strlen(buf),
            0, (struct sockaddr *)&ser_addr, sizeof(ser_addr));
 
@@ -355,7 +364,7 @@ static int w5500UdpService(int argc, char *argv[])
 {
     if (argc < 3)
     {
-        ulog_i(TAG, "请输入udpService的port ");
+        ulog_w(TAG, "请输入udpService的port ");
         return 0;
     }
 
@@ -363,7 +372,7 @@ static int w5500UdpService(int argc, char *argv[])
     static rt_thread_t hid = NULL;
     if (NULL != hid)
     {
-        ulog_w(TAG, "udp服务器已启动，请勿重复创建");
+        ulog_w(TAG, "udp服务器已启动, 请勿重复创建");
         return -1;
     }
 
@@ -375,10 +384,14 @@ static int w5500UdpService(int argc, char *argv[])
                            18,                 // 线程优先级
                            5);                 // 线程时间片
 
-    if (NULL != hid)
-        rt_thread_startup(hid);
-    else
+    if (NULL == hid)
+    {
         ulog_w(TAG, "创建udp echo线程失败");
+        return -1;
+    }
+
+    rt_thread_startup(hid);
+    ulog_i(TAG, "udp echo服务器启动成功 service: %s, port: %d", inet_ntoa(RyanNetdev->ip_addr), port);
 
     return 0;
 }
@@ -387,7 +400,7 @@ static int w5500TcpClient(int argc, char *argv[])
 {
     if (argc < 4)
     {
-        ulog_i(TAG, "请输入tcp服务器的IP, port ");
+        ulog_w(TAG, "请输入tcp服务器的IP, port ");
         return 0;
     }
 
@@ -398,7 +411,7 @@ static int w5500TcpClient(int argc, char *argv[])
 
     // 创建一个TCP套接字 SOCK_STREAM
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    printf("sockfd = %d\n", sockfd);
+    ulog_i(TAG, "TCP客户端套接字sockfd: %d", sockfd);
 
     // bind是可选的,这里使用，纯粹为了演示
     // !此库w5500实现, 不推荐使用bind，使用bind会释放之前申请socket，重新申请。这是因为w5500特性造成
@@ -453,7 +466,7 @@ static int w5500tcpService(int argc, char *argv[])
 {
     if (argc < 3)
     {
-        ulog_i(TAG, "请输入tcpService的port ");
+        ulog_w(TAG, "请输入tcpService的port ");
         return 0;
     }
 
@@ -462,7 +475,7 @@ static int w5500tcpService(int argc, char *argv[])
     static rt_thread_t hid = NULL;
     if (NULL != hid)
     {
-        ulog_w(TAG, "tcp服务器已启动，请勿重复创建");
+        ulog_w(TAG, "tcp服务器已启动, 请勿重复创建");
         return -1;
     }
 
@@ -474,10 +487,15 @@ static int w5500tcpService(int argc, char *argv[])
                            16,           // 线程优先级
                            5);           // 线程时间片
 
-    if (hid != NULL)
-        rt_thread_startup(hid);
-    else
+    if (NULL == hid)
+    {
         ulog_w(TAG, "创建tcp echo线程失败");
+        return -1;
+    }
+
+    rt_thread_startup(hid);
+    ulog_i(TAG, "tcp echo服务器启动成功 service: %s, port: %d", inet_ntoa(RyanNetdev->ip_addr), port);
+
     return 0;
 }
 
@@ -486,7 +504,7 @@ static int w5500Broadcast(int argc, char *argv[])
 
     if (argc < 4)
     {
-        ulog_i(TAG, "请输入broadcast发送的port和消息内容 ");
+        ulog_w(TAG, "请输入broadcast发送的port和消息内容 ");
         return 0;
     }
 
@@ -510,6 +528,8 @@ static int w5500Broadcast(int argc, char *argv[])
            (struct sockaddr *)&dst_addr, sizeof(dst_addr));
 
     close(sockfd);
+
+    ulog_i(TAG, "broadcast发送成功");
     return 0;
 }
 
@@ -528,7 +548,7 @@ static int w5500Multicast(int argc, char *argv[])
 
     if (argc < 3)
     {
-        ulog_i(TAG, "请输入multicast发送的port ");
+        ulog_w(TAG, "请输入multicast发送的port ");
         return 0;
     }
 
@@ -537,7 +557,7 @@ static int w5500Multicast(int argc, char *argv[])
     static rt_thread_t hid = NULL;
     if (NULL != hid)
     {
-        ulog_w(TAG, "组播echo服务器已启动，请勿重复创建");
+        ulog_w(TAG, "组播echo服务器已启动, 请勿重复创建");
         return -1;
     }
 
@@ -549,20 +569,23 @@ static int w5500Multicast(int argc, char *argv[])
                            19,                       // 线程优先级
                            5);                       // 线程时间片
 
-    if (hid != NULL)
-        rt_thread_startup(hid);
-    else
-        ulog_w(TAG, "创建udp echo线程失败");
+    if (NULL == hid)
+    {
+        ulog_w(TAG, "创建multicast echo线程失败");
+        return -1;
+    }
 
+    rt_thread_startup(hid);
+    ulog_i(TAG, "multicast echo服务器启动成功");
     ulog_i(TAG, "multicast 地址: %s, port: %d", "224.0.0.252", port);
     return 0;
 }
 
 static int w5500dhcpLeasetime(int argc, char *argv[])
 {
-    if (RT_TRUE != netdev_is_dhcp_enabled(ryanNetDev))
+    if (RT_TRUE != netdev_is_dhcp_enabled(RyanNetdev))
     {
-        ulog_i(TAG, "dhcp服务未启动, 目前处于静态ip状态");
+        ulog_w(TAG, "dhcp服务未启动, 目前处于静态ip状态");
         return 0;
     }
 
@@ -574,22 +597,21 @@ static int w5500GetNetInfo(int argc, char *argv[])
 {
     uint8_t tmpstr[6] = {0};
     wiz_NetInfo netinfo = {0};
-    // Display Network Information
     ctlwizchip(CW_GET_ID, (void *)tmpstr);
     ctlnetwork(CN_GET_NETINFO, (void *)&netinfo); // 获取网络信息
 
     if (NETINFO_DHCP == netinfo.dhcp)
-        printf("\r\n=== %s NET CONF : DHCP ===\r\n", (char *)tmpstr);
+        ulog_i(TAG, "=== %s NET CONF : DHCP ===", (char *)tmpstr);
     else
-        printf("\r\n=== %s NET CONF : Static ===\r\n", (char *)tmpstr);
+        ulog_i(TAG, "=== %s NET CONF : Static ===", (char *)tmpstr);
 
-    printf("MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n", netinfo.mac[0], netinfo.mac[1], netinfo.mac[2],
+    ulog_i(TAG, "MAC: %02X:%02X:%02X:%02X:%02X:%02X", netinfo.mac[0], netinfo.mac[1], netinfo.mac[2],
            netinfo.mac[3], netinfo.mac[4], netinfo.mac[5]);
-    printf("SIP: %d.%d.%d.%d\r\n", netinfo.ip[0], netinfo.ip[1], netinfo.ip[2], netinfo.ip[3]);
-    printf("GAR: %d.%d.%d.%d\r\n", netinfo.gw[0], netinfo.gw[1], netinfo.gw[2], netinfo.gw[3]);
-    printf("SUB: %d.%d.%d.%d\r\n", netinfo.sn[0], netinfo.sn[1], netinfo.sn[2], netinfo.sn[3]);
-    printf("DNS: %d.%d.%d.%d\r\n", netinfo.dns[0], netinfo.dns[1], netinfo.dns[2], netinfo.dns[3]);
-    printf("===========================\r\n");
+    ulog_i(TAG, "SIP: %d.%d.%d.%d", netinfo.ip[0], netinfo.ip[1], netinfo.ip[2], netinfo.ip[3]);
+    ulog_i(TAG, "GAR: %d.%d.%d.%d", netinfo.gw[0], netinfo.gw[1], netinfo.gw[2], netinfo.gw[3]);
+    ulog_i(TAG, "SUB: %d.%d.%d.%d", netinfo.sn[0], netinfo.sn[1], netinfo.sn[2], netinfo.sn[3]);
+    ulog_i(TAG, "DNS: %d.%d.%d.%d", netinfo.dns[0], netinfo.dns[1], netinfo.dns[2], netinfo.dns[3]);
+    ulog_i(TAG, "===========================");
 
     return 0;
 }
@@ -598,7 +620,7 @@ static int w5500GetHostByName(int argc, char *argv[])
 {
     if (argc < 4)
     {
-        ulog_i(TAG, "请版本、带解析的域名信息。 版本1使用线程安全版本, 0非线程安全版本");
+        ulog_w(TAG, "请版本、带解析的域名信息。 版本1使用线程安全版本, 0非线程安全版本");
         return 0;
     }
 
@@ -611,21 +633,21 @@ static int w5500GetHostByName(int argc, char *argv[])
         struct hostent *hent;
         hent = gethostbyname(nameStr);
 
-        if (hent == NULL)
+        if (NULL == hent)
         {
-            printf("ERROR: gethostbyname error for hostname: %s\n", nameStr);
+            ulog_e(TAG, "gethostbyname error for hostname: %s", nameStr);
             return 0;
         }
 
-        printf("name: %s, addrtype: %d(AF_INET:%d), len:%d\n",
+        ulog_i(TAG, "name: %s, addrtype: %d, AF_INET: %d, len:%d",
                hent->h_name, hent->h_addrtype, AF_INET,
                hent->h_length);
 
         for (uint8_t i = 0; hent->h_aliases[i]; i++)
-            printf("alias hostname: %s\n", hent->h_aliases[i]);
+            ulog_i(TAG, "alias hostname: %s", hent->h_aliases[i]);
 
         for (uint8_t i = 0; hent->h_addr_list[i]; i++)
-            printf("host addr is: %s\n", inet_ntoa(*(struct in_addr *)hent->h_addr_list[i]));
+            ulog_i(TAG, "host addr is: %s", inet_ntoa(*(struct in_addr *)hent->h_addr_list[i]));
     }
 
     else
@@ -634,21 +656,21 @@ static int w5500GetHostByName(int argc, char *argv[])
         int ret;
         struct hostent hostinfo, *phost;
 
-        if (gethostbyname_r(nameStr, &hostinfo, buf, sizeof(buf), &phost, &ret))
+        if (0 != gethostbyname_r(nameStr, &hostinfo, buf, sizeof(buf), &phost, &ret))
         {
-            printf("ERROR:gethostbyname(%s) ret:%d\n", nameStr, ret);
+            ulog_e(TAG, "gethostbyname: %s, ret:%d", nameStr, ret);
             return 0;
         }
 
-        printf("name: %s, addrtype: %d(AF_INET:%d), len:%d\n",
+        ulog_i(TAG, "name: %s, addrtype: %d, AF_INET: %d, len: %d",
                phost->h_name, phost->h_addrtype, AF_INET,
                phost->h_length);
 
         for (uint8_t i = 0; hostinfo.h_aliases[i]; i++)
-            printf("alias hostname: %s\n", hostinfo.h_aliases[i]);
+            ulog_i(TAG, "alias hostname: %s", hostinfo.h_aliases[i]);
 
         for (uint8_t i = 0; hostinfo.h_addr_list[i]; i++)
-            printf("host addr is: %s\n", inet_ntoa(*((struct in_addr *)hostinfo.h_addr_list[i])));
+            ulog_i(TAG, "host addr is: %s", inet_ntoa(*((struct in_addr *)hostinfo.h_addr_list[i])));
     }
 
     return 0;
@@ -658,7 +680,7 @@ static int w5500GetAddrInfo(int argc, char *argv[])
 {
     if (argc < 4)
     {
-        ulog_i(TAG, "请输入要解析的域名和端口");
+        ulog_w(TAG, "请输入要解析的域名和端口");
         return 0;
     }
 
@@ -673,7 +695,7 @@ static int w5500GetAddrInfo(int argc, char *argv[])
     int result = getaddrinfo(nameStr, namePort, &hints, &addrList);
     if (0 != result)
     {
-        printf("ERROR: getaddrinfo(%s) ret:%d\n", nameStr, result);
+        ulog_e(TAG, "getaddrinfo: %s ret:%d", nameStr, result);
         return 0;
     }
 
@@ -685,7 +707,7 @@ static int w5500GetAddrInfo(int argc, char *argv[])
     {
         sinp = (struct sockaddr_in *)aip->ai_addr;
         addr = inet_ntop(AF_INET, &sinp->sin_addr, buf, sizeof(buf));
-        printf(" addr = %s, port = %d\n", addr ? addr : "unknow ", ntohs(sinp->sin_port));
+        ulog_i(TAG, "addr: %s, port: %d", addr ? addr : "unknow ", ntohs(sinp->sin_port));
     }
 
     if (NULL != addrList)
@@ -707,23 +729,22 @@ struct RyanMqttCmdDes
 
 static int w5500Help(int argc, char *argv[]);
 
-static const struct RyanMqttCmdDes cmdTab[] =
-    {
-        {"help", "打印帮助信息", w5500Help},
-        {"start", "打印帮助信息", w5500Start},
-        {"static", "设置w5500静态地址", w5500Static},
-        {"dhcp", "设置w5500 dhcp", w5500Dhcp},
-        {"udpClient", "w5500 udp客户端 param: ip, port", w5500UdpClient},
-        {"udpService", "w5500 udp echo服务器 param: port", w5500UdpService},
-        {"tcpClient", "w5500 tcp客户端 param: ip, port", w5500TcpClient},
-        {"tcpService", "w5500 tcp 多线程echo服务器 param: port", w5500tcpService},
-        {"broadcast", "w5500 广播 param: port, msg", w5500Broadcast},
-        {"multicast", "w5500 多播 echo服务器 param: port", w5500Multicast},
+static const struct RyanMqttCmdDes cmdTab[] = {
+    {"help", "打印帮助信息", w5500Help},
+    {"start", "打印帮助信息", w5500Start},
+    {"static", "netdev设置w5500静态地址,启动echo服务器后不要调用,调用会关闭所有socket", w5500Static},
+    {"dhcp", "netdev设置w5500 dhcp,启动echo服务器后不要调用,调用会关闭所有socket", w5500Dhcp},
+    {"udpClient", "w5500 udp客户端 param: ip, port", w5500UdpClient},
+    {"udpService", "w5500 udp echo服务器 param: port", w5500UdpService},
+    {"tcpClient", "w5500 tcp客户端 param: ip, port", w5500TcpClient},
+    {"tcpService", "w5500 tcp 多线程echo服务器 param: port", w5500tcpService},
+    {"broadcast", "w5500 广播 param: port, msg", w5500Broadcast},
+    {"multicast", "w5500 多播 echo服务器 param: port", w5500Multicast},
 
-        {"dhcpLease", "w5500 获取dhcp租期和剩余时间", w5500dhcpLeasetime},
-        {"netInfo", "w5500 获取芯片内部配置信息", w5500GetNetInfo},
-        {"gethostbyname", "w5500 根据域名解析地址信息", w5500GetHostByName},
-        {"getaddrinfo", "w5500 根据域名获取IP等信息", w5500GetAddrInfo},
+    {"dhcpLease", "w5500 获取dhcp租期和剩余时间", w5500dhcpLeasetime},
+    {"netInfo", "w5500 获取芯片内部配置信息", w5500GetNetInfo},
+    {"gethostbyname", "w5500 根据域名解析地址信息", w5500GetHostByName},
+    {"getaddrinfo", "w5500 根据域名解析地址信息", w5500GetAddrInfo}
 
 };
 
@@ -766,9 +787,26 @@ static int RyanMqttMsh(int argc, char *argv[])
     if (runCmd->fun != NULL)
         result = runCmd->fun(argc, argv);
 
-    return 0;
+    return result;
 }
 
 #if defined(RT_USING_MSH)
 MSH_CMD_EXPORT_ALIAS(RyanMqttMsh, w5500, RyanMqtt command);
 #endif
+
+#endif
+// stm32用户需要更改此代码为自己w5500实际挂载的spi总线
+// 非stm32用户可以调用rt_spi_bus_attach_device，
+// 参考连接:https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/spi/spi?id=%e6%8c%82%e8%bd%bd-spi-%e8%ae%be%e5%a4%87
+// static int rt_hw_spi_flash_init(void)
+// {
+//     rt_err_t result = rt_hw_spi_device_attach("spi2", RYANW5500_SPI_DEVICE, GPIOD, GPIO_PIN_7);
+//     if (RT_EOK != result)
+//     {
+//         rt_kprintf("RyanW5500 SPI init fail!!!!!");
+//     }
+
+//     return result;
+// }
+// // 导出到自动初始化
+// INIT_COMPONENT_EXPORT(rt_hw_spi_flash_init);

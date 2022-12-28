@@ -12,12 +12,12 @@
         uint8_t linkState = 0;                  \
         ctlwizchip(CW_GET_PHYLINK, &linkState); \
         if (PHY_LINK_ON != linkState)           \
-            return -1;                          \
+            return value;                       \
     } while (0);
 
 // 可用套接字的全局数组
 static RyanW5500Socket RyanW5500Sockets[RyanW5500MaxSocketNum] = {0};
-static uint16_t wiz_port = 5500; // 用户可以自定义
+static uint16_t wiz_port = 15500; // 用户可以自定义
 
 /**
  * @brief 中断接收到数据回调函数
@@ -135,7 +135,6 @@ static int RyanW5500SocketDestory(RyanW5500Socket *sock)
         // 分配并初始化新的客户端套接字
         RyanList_t *curr = NULL,
                    *next = NULL;
-        RyanW5500ClientInfo *clientHandler = NULL;
 
         RyanListForEachSafe(curr, next, &sock->serviceInfo->clientList)
         {
@@ -201,8 +200,7 @@ RyanW5500Socket *RyanW5500SocketCreate(int type, int port)
 {
 
     RyanW5500Socket *sock = NULL;
-    char name[32] = {0};
-    int idx = 0;
+    uint8_t idx = 0;
 
     rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); // 获取互斥锁
     // 找到一个空的 WIZnet 套接字条目
@@ -226,8 +224,9 @@ RyanW5500Socket *RyanW5500SocketCreate(int type, int port)
 
     rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
 
-    setSn_IR(sock->socket, 0xff);            // 清空套接字中断
-    setSn_IMR(sock->socket, RyanW5500SnIMR); // 设置套接字ISR状态支持
+    setSn_IR(sock->socket, 0xff);              // 清空套接字中断
+    setSn_IMR(sock->socket, RyanW5500SnIMR);   // 设置套接字ISR状态支持
+    wiz_recv_ignore(sock->socket, UINT16_MAX); // 清空之前的接收缓存
 
     int8_t result = wizchip_socket(sock->socket, sock->type, sock->port, 0); // wizchip_socket内部会先close一次
     if (result != sock->socket)
@@ -255,13 +254,14 @@ RyanW5500Socket *RyanW5500CreateListenClient(RyanW5500Socket *serviceSock)
     assert(NULL != serviceSock);
 
     RyanW5500Socket *clientSock = NULL;
+    RyanW5500ClientInfo *clientInfo = NULL;
     clientSock = RyanW5500SocketCreate(serviceSock->type, serviceSock->port);
     RyanW5500CheckCode(NULL != clientSock, EMFILE, { goto err; });
 
     clientSock->serviceSocket = serviceSock->socket;
 
     // 创建客户端信息并将客户端添加到服务器clientList
-    RyanW5500ClientInfo *clientInfo = (RyanW5500ClientInfo *)malloc(sizeof(RyanW5500ClientInfo));
+    clientInfo = (RyanW5500ClientInfo *)malloc(sizeof(RyanW5500ClientInfo));
     RyanW5500CheckCode(NULL != clientInfo, ENOMEM, { goto err; });
     memset(clientInfo, 0, sizeof(RyanW5500ClientInfo));
 
@@ -272,6 +272,7 @@ RyanW5500Socket *RyanW5500CreateListenClient(RyanW5500Socket *serviceSock)
     clientSock->state = RyanW5500SocketListen;
 
     return clientSock;
+
 err:
     if (NULL != clientInfo)
         wiz_closesocket(clientSock->socket);
@@ -412,7 +413,6 @@ int wiz_connect(int socket, const struct sockaddr *name, socklen_t namelen)
     RyanW5500CheckCode(NULL != name && 0 != namelen, EAFNOSUPPORT, { return -1; }); // 非法地址
 
     RyanW5500Socket *sock = NULL;
-    ip_addr_t remoteAddr;
 
     sock = RyanW5500GetSock(socket);
     RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
@@ -439,7 +439,7 @@ int wiz_connect(int socket, const struct sockaddr *name, socklen_t namelen)
                     // 通过套接字结构获取 IP 地址和端口
     {
         uint8_t ipStrArr[4] = {0};
-        const struct sockaddr_in *sin = (const struct sockaddr_in *)name;
+        struct sockaddr_in *sin = (struct sockaddr_in *)name;
 
         inAddrToipStrArr(&sin->sin_addr.s_addr, ipStrArr);
 
@@ -585,8 +585,7 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
     RyanW5500Socket *sock = NULL;
     uint8_t socketState = 0;
     int32_t sendLen = 0,
-            timeout = 0,
-            result = 0;
+            timeout = 0;
 
     RyanW5500CheckCode(NULL != data && 0 != size, EFAULT, { return -1; });
 
@@ -627,9 +626,9 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
 
         // 获取目标地址结构体指针
         if (RyanW5500SocketEstablished == sock->state && NULL != sock->remoteAddr)
-            sin = (const struct sockaddr_in *)sock->remoteAddr;
+            sin = (struct sockaddr_in *)sock->remoteAddr;
         else
-            sin = (const struct sockaddr_in *)to;
+            sin = (struct sockaddr_in *)to;
 
         // 查看是否是广播
         if (sin->sin_addr.s_addr == -1) // inet_addr("255.255.255.255")
@@ -936,11 +935,11 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
         switch (optname)
         {
         case IP_TOS: // 本选项是int型的数值选项，允许对TCP、UDP的IP头中的tos字段进行设置
-            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TOS, optval), EINVAL, { return -1; });
+            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TOS, (void *)optval), EINVAL, { return -1; });
             break;
 
         case IP_TTL: // 本选项是int型的数值选项，允许对单播报文的TTL默认值进行设置。
-            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TTL, optval), EINVAL, { return -1; });
+            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TTL, (void *)optval), EINVAL, { return -1; });
             break;
 
         // UDP 多播的选项和类型
@@ -1275,7 +1274,7 @@ int wiz_gethostbyname_r(const char *name, struct hostent *ret, char *buf, size_t
 {
 
     // 检查WIZnet初始化状态
-    RyanW5500LinkCheck(NULL);
+    RyanW5500LinkCheck(-1);
 
     // gethostbyname_r 的辅助结构，用于访问hostent中的 char*缓冲区
     struct gethostbyname_r_helper
@@ -1354,14 +1353,14 @@ int wiz_gethostbyname_r(const char *name, struct hostent *ret, char *buf, size_t
  * @param nodename 主机名，可以是域名，也可以是地址的点分十进制字符串
  * @param servname 服务名可以是十进制的端口号("8080")字符串，(也可以是已定义的服务名称，如"ftp"、"http"等，当前接口不支持)
  * @param hints 用户设定的 struct addrinfo 结构体
- * @param result 该参数获取一个指向存储结果的 struct addrinfo 结构体列表，使用完成后调用 freeaddrinfo() 释放存储结果空间。
+ * @param res 该参数获取一个指向存储结果的 struct addrinfo 结构体列表，使用完成后调用 freeaddrinfo() 释放存储结果空间。
  * @return int
  */
-int wiz_getaddrinfo(const char *nodename, const char *servname, const struct addrinfo *hints, struct addrinfo **result)
+int wiz_getaddrinfo(const char *nodename, const char *servname, const struct addrinfo *hints, struct addrinfo **res)
 {
 
     // 检查WIZnet初始化状态
-    RyanW5500LinkCheck(NULL);
+    RyanW5500LinkCheck(-1);
 
     int err = 0;
     int port_nr = 0;
@@ -1372,10 +1371,10 @@ int wiz_getaddrinfo(const char *nodename, const char *servname, const struct add
     size_t namelen = 0;
     int ai_family = 0;
 
-    if (NULL == result)
+    if (NULL == res)
         return EAI_FAIL;
 
-    *result = NULL;
+    *res = NULL;
 
     // nodename 和 servname 可以设置为NULL，但同时只能有一个为NUL。
     if ((NULL == nodename) && (NULL == servname))
@@ -1474,7 +1473,7 @@ int wiz_getaddrinfo(const char *nodename, const char *servname, const struct add
     ai->ai_addrlen = sizeof(struct sockaddr_storage);
     ai->ai_addr = (struct sockaddr *)sa;
 
-    *result = ai;
+    *res = ai;
     return 0;
 }
 

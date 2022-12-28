@@ -67,7 +67,7 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
     {
 
         RyanW5500Entry.netDevFlag &= ~netDevSetDevInfo;
-        for (uint8_t socket = 0; socket < 8; socket++)
+        for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
             wiz_closesocket(socket);
 
         gWIZNETINFO.dhcp = netdev_is_dhcp_enabled(netdev) ? NETINFO_DHCP : NETINFO_STATIC;
@@ -78,7 +78,7 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
     if (RyanW5500Entry.netDevFlag & netDevDHCP)
     {
         RyanW5500Entry.netDevFlag &= ~netDevDHCP;
-        for (uint8_t socket = 0; socket < 8; socket++)
+        for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
             wiz_closesocket(socket);
 
         gWIZNETINFO.dhcp = netdev_is_dhcp_enabled(netdev) ? NETINFO_DHCP : NETINFO_STATIC;
@@ -150,9 +150,11 @@ next:
     if (PHY_LINK_ON != linkState)
         return -1;
 
-    setSIMR(0xff); // 启用所有socket通道中断
-    setIMR(0x0);   // 禁用所有通用中断，不使用
-    for (uint8_t i = 0; i < 8; i++)
+    uint16_t ret = 0xff;     // 启用所有socket通道中断
+    ret = (ret << 8) + 0x00; // 禁用所有通用中断，不使用
+    ctlwizchip(CW_SET_INTRMASK, (void *)&ret);
+
+    for (uint8_t i = 0; i < RyanW5500MaxSocketNum; i++) // 每次联网成功都进行socket中断掩码配置
         setSn_IMR(i, RyanW5500SnIMR);
 
     return 0;
@@ -163,6 +165,7 @@ static void wizIntDataTask(void *parameter)
     uint8_t ir = 0,
             sir = 0,
             sn_ir = 0;
+    uint16_t intr = 0;
     struct netdev *netdev = (struct netdev *)parameter;
 
     platformTimer_t netWorkTimer = {0};
@@ -171,13 +174,12 @@ static void wizIntDataTask(void *parameter)
     while (1)
     {
 
-        // 500毫秒检查一次网络状态和监听套接字
         if (0 == platformTimerRemain(&netWorkTimer))
         {
             if (-1 == RyanW5500NetWorkInit(netdev))
             {
                 LOG_D("网络没有连接");
-                delay(500);
+                delay(1000);
                 continue;
             }
 
@@ -190,16 +192,13 @@ static void wizIntDataTask(void *parameter)
 
         while (1)
         {
-            // uint16_t intr = 0;
-            // ctlwizchip(CW_GET_INTERRUPT, (void *)&intr);
-            // ir = (uint8_t)intr;
-            // sir = (uint8_t)((uint16_t)intr >> 8);
+            ctlwizchip(CW_GET_INTERRUPT, (void *)&intr);
+            ir = (uint8_t)intr;
+            sir = (uint8_t)(intr >> 8);
 
-            setIR(0xff); // 没有使用IR中断，保险起见进行清空
+            setIR(ir); // 没有使用IR中断，保险起见进行清空
 
-            // 获取和处理套接字中断寄存器
-            sir = getSIR(); // 套接字中断寄存器
-            if (sir == 0)
+            if (0 == sir)
                 break;
 
             for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
@@ -249,7 +248,19 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
     memcpy(&gWIZNETINFO, netInfo, sizeof(wiz_NetInfo));
     memset(&RyanW5500Entry, 0, sizeof(RyanW5500Entry));
 
+    RyanW5500SpiInit();                                                     // w5500 spi初始化
+    reg_wizchip_cris_cbfunc(RyanW5500CriticalEnter, RyanW5500CriticalExit); // 注册临界区函数
+    reg_wizchip_cs_cbfunc(RyanW5500CsSelect, RyanW5500CsDeselect);          // 注册片选函数
+    reg_wizchip_spi_cbfunc(RyanW5500ReadByte, RyanW5500WriteByte);          // 注册读写函数
+    reg_wizchip_spiburst_cbfunc(RyanW5500ReadBurst, RyanW5500WriteBurst);   // 注册多个字节读写
+
+    RyanW5500AttachIRQ(RyanW5500IRQCallback); // 绑定w5500中断回调函数
+
     RyanW5500Reset(); // 重启w5500
+
+    RyanW5500Entry.W5500SpiMutexHandle = rt_mutex_create("RyanW5500SpiMutex", RT_IPC_FLAG_FIFO);
+    RyanW5500Entry.socketMutexHandle = rt_mutex_create("RyanW5500SocketMutex", RT_IPC_FLAG_FIFO);
+    RyanW5500Entry.W5500EventHandle = rt_event_create("RyanW5500Event", RT_IPC_FLAG_PRIO);
 
     // 超时中断触发为retry_cnt * time_100us * 100us
     struct wiz_NetTimeout_t net_timeout = {
@@ -269,18 +280,6 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
     netdev = RyanW5500NetdevRegister("RyanW5500"); // W5500
     netdev_low_level_set_status(netdev, RT_TRUE);  // 设置网络接口设备状态
 
-    RyanW5500Entry.W5500SpiMutexHandle = rt_mutex_create("RyanW5500SpiMutex", RT_IPC_FLAG_FIFO);
-    RyanW5500Entry.socketMutexHandle = rt_mutex_create("RyanW5500SocketMutex", RT_IPC_FLAG_FIFO);
-    RyanW5500Entry.W5500EventHandle = rt_event_create("RyanW5500Event", RT_IPC_FLAG_PRIO);
-
-    RyanW5500SpiInit();                                                     // w5500 spi初始化
-    reg_wizchip_cris_cbfunc(RyanW5500CriticalEnter, RyanW5500CriticalExit); // 注册临界区函数
-    reg_wizchip_cs_cbfunc(RyanW5500CsSelect, RyanW5500CsDeselect);          // 注册片选函数
-    reg_wizchip_spi_cbfunc(RyanW5500ReadByte, RyanW5500WriteByte);          // 注册读写函数
-    reg_wizchip_spiburst_cbfunc(RyanW5500ReadBurst, RyanW5500WriteBurst);   // 注册多个字节读写
-
-    RyanW5500AttachIRQ(RyanW5500IRQCallback); // 绑定w5500中断回调函数
-
     RyanW5500Entry.w5500TaskHandle = rt_thread_create("RyanW5500",    // 线程name
                                                       wizIntDataTask, // 线程入口函数
                                                       (void *)netdev, // 线程入口函数参数
@@ -290,4 +289,6 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
 
     if (RyanW5500Entry.w5500TaskHandle != NULL)
         rt_thread_startup(RyanW5500Entry.w5500TaskHandle);
+
+    return 0;
 }

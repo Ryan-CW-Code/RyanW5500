@@ -1,14 +1,20 @@
 
 
-#ifndef __RyanW5500Spi_
-#define __RyanW5500Spi_
+#ifndef __plarformW5500Spi__
+#define __plarformW5500Spi__
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-#include "RyanApplication.h"
 
+#include <stdint.h>
+
+    // 定义枚举类型
+
+    // 定义结构体类型
+
+    /* extern variables-----------------------------------------------------------*/
     extern int RyanW5500SpiInit();
     extern void RyanW5500WriteByte(uint8_t data);
     extern uint8_t RyanW5500ReadByte(void);
@@ -19,8 +25,11 @@ extern "C"
     extern void RyanW5500CsSelect(void);
     extern void RyanW5500CsDeselect(void);
 
+    extern void RyanW5500Reset(void);
+    extern void RyanW5500AttachIRQ(void (*RyanW5500IRQCallback)(void *argument));
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __WIZ_SOCKET_H__ */
+#endif

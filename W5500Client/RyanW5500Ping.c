@@ -211,7 +211,8 @@ int RyanW5500Ping(struct netdev *netdev, const char *host, size_t data_len, uint
         ping_resp->ip_addr.addr = serviceAddr.s_addr;
         ping_resp->ticks = 0xffff - platformTimerRemain(&pingTimer);
         ping_resp->data_len = data_len;
-        wiz_getsockopt(socket, IPPROTO_IP, IP_TTL, &ping_resp->ttl, sizeof(ping_resp->ttl));
+        int optlen = sizeof(ping_resp->ttl);
+        wiz_getsockopt(socket, IPPROTO_IP, IP_TTL, &ping_resp->ttl, (socklen_t *)&optlen);
     }
 
     wiz_closesocket(socket);

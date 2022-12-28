@@ -190,7 +190,7 @@ static const struct sal_proto_family RyanW5500Family =
  * @param netdev_name
  * @return struct netdev*
  */
-struct netdev *RyanW5500NetdevRegister(const char *netdev_name)
+struct netdev *RyanW5500NetdevRegister(char *netdev_name)
 {
     struct netdev *netdev = NULL;
 
