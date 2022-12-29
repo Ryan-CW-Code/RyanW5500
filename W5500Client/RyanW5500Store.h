@@ -92,7 +92,6 @@ extern "C"
         rt_timer_t W5500TimerHandle;
         rt_event_t W5500EventHandle;    // 事件标志组，用于中断通知和socket状态通知
         rt_mutex_t socketMutexHandle;   // socket锁
-        rt_mutex_t W5500SpiMutexHandle; // spi锁
         rt_thread_t w5500TaskHandle;    // W5500线程
     } RyanW5500Entry_t;
 

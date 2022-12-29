@@ -7,8 +7,8 @@ extern "C"
 {
 #endif
 
-#define MAX_DHCP_RETRY 6    // 最大重试计数
-#define DHCP_WAIT_TIME 3000 // 等待时间
+#define MAX_DHCP_RETRY 8    // 最大重试计数
+#define DHCP_WAIT_TIME 1000 // 等待时间
 
 #define DHCP_SERVER_PORT 67 // DHCP 服务器端口号
 #define DHCP_CLIENT_PORT 68 // DHCP 客户端端口号

@@ -37,8 +37,11 @@ struct wiz_ping_msg
  */
 static uint16_t wiz_checksum(uint8_t *src, uint32_t len)
 {
-    uint16_t sum, tsum, i, j;
-    uint32_t lsum;
+    uint16_t sum = 0,
+             tsum = 0,
+             i = 0,
+             j = 0;
+    uint32_t lsum = 0;
 
     j = len >> 1;
     lsum = 0;
@@ -64,9 +67,10 @@ static uint16_t wiz_checksum(uint8_t *src, uint32_t len)
 
 static int wiz_ping_request(int socket)
 {
-    int idx, send_len;
-    uint16_t tmp_checksum;
-    struct wiz_ping_msg ping_req;
+    uint16_t tmp_checksum = 0;
+    int idx = 0,
+        send_len = 0;
+    struct wiz_ping_msg ping_req = {0};
 
     // 设置请求ping消息对象
     ping_req.type = WIZ_PING_REQUEST;
@@ -91,14 +95,14 @@ static int wiz_ping_request(int socket)
 
 static int wiz_ping_reply(int socket, struct sockaddr *from)
 {
-    uint16_t tmp_checksum;
-    uint8_t recv_buf[WIZ_PING_HEAD_LEN + WIZ_PING_DATA_LEN + 1];
-    struct wiz_ping_msg ping_rep;
 
-    int recv_len;
-    int idx;
-
+    uint8_t recv_buf[WIZ_PING_HEAD_LEN + WIZ_PING_DATA_LEN + 1] = {0};
+    uint16_t tmp_checksum = 0;
+    int recv_len = 0,
+        idx = 0;
+    struct wiz_ping_msg ping_rep = {0};
     platformTimer_t pingReplyTimer = {0};
+
     platformTimerCutdown(&pingReplyTimer, WIZ_PING_TIMEOUT);
     while (1)
     {

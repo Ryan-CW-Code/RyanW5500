@@ -589,42 +589,49 @@ int8_t check_DHCP_leasedIP(void)
 uint8_t DHCP_run(uint8_t flag)
 {
     uint8_t type = 0;
+    uint8_t dhcp_retry_count = 0;
+    platformTimer_t recvTimer = {0};
+    RyanW5500Socket *sock = NULL;
 
     setSHAR(gWIZNETINFO.mac); // 设置w5500 mac
 
-    RyanW5500Socket *sock = RyanW5500SocketCreate(Sn_MR_UDP, DHCP_CLIENT_PORT);
+    sock = RyanW5500SocketCreate(Sn_MR_UDP, DHCP_CLIENT_PORT);
     if (NULL == sock)
     {
         LOG_W("dhcp socket失败");
         return -1;
     }
 
+    // 申请dhcp报文空间
     uint8_t *dhcpDataBuf = (uint8_t *)rt_malloc(RIP_MSG_SIZE);
+    if (NULL == dhcpDataBuf)
+    {
+        wiz_closesocket(sock->socket);
+        return -1;
+    }
 
-    DHCP_SOCKET = sock->socket; // SOCK_DHCP
+    DHCP_SOCKET = sock->socket;
     pDHCPMSG = (RIP_MSG *)dhcpDataBuf;
 
     if (1 != flag) // flag 1表示处于续租状态
     {
         // 生成唯一事务id
-        DHCP_XID = 0x12345678;
+        DHCP_XID = platformUptimeMs();
         DHCP_XID += gWIZNETINFO.mac[3];
         DHCP_XID += gWIZNETINFO.mac[4];
         DHCP_XID += gWIZNETINFO.mac[5];
-        DHCP_XID += (gWIZNETINFO.mac[3] ^ gWIZNETINFO.mac[4] ^ gWIZNETINFO.mac[5]);
 
         dhcp_state = STATE_DHCP_INIT;
         platformTimerInit(&dhcp_lease_time);
     }
 
-    uint8_t dhcp_retry_count = 0;
-    platformTimer_t recvTimer = {0};
     platformTimerCutdown(&recvTimer, DHCP_WAIT_TIME);
 
     while (1)
     {
         type = parseDHCPMSG();
 
+        // 根据dhcp_state发送不同报文
         switch (dhcp_state)
         {
         case STATE_DHCP_INIT: // dhcp初始化状态

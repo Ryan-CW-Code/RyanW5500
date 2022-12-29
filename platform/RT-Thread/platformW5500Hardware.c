@@ -103,6 +103,26 @@ void RyanW5500ReadBurst(uint8_t *pbuf, uint16_t len)
 }
 
 /**
+ * @brief 获取当前SPI总线资源
+ * spi只挂载一个设备时可以忽略
+ *
+ */
+void RyanW5500CriticalEnter(void)
+{
+    rt_spi_take_bus(RyanW5500SpiDevice);
+}
+
+/**
+ * @brief 释放当前SPI总线资源
+ * spi只挂载一个设备时可以忽略
+ *
+ */
+void RyanW5500CriticalExit(void)
+{
+    rt_spi_release_bus(RyanW5500SpiDevice);
+}
+
+/**
  * @brief 片选使能
  *
  */

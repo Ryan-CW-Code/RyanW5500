@@ -444,15 +444,16 @@ int16_t dns_makequery(uint16_t op, char *name, uint8_t *buf, uint16_t len)
  */
 int8_t DNS_run(uint8_t *dns_ip, uint8_t *name, uint8_t *ip_from_dns, uint8_t *buf)
 {
-    int8_t ret;
-    struct dhdr dhp;
-    uint8_t ip[4];
+    int8_t ret = 0;
     uint8_t retry_count = 0;
-    uint16_t len, port;
-
+    uint16_t len = 0,
+             port = 0;
+    uint8_t ip[4] = {0};
+    struct dhdr dhp = {0};
     platformTimer_t recvTimer = {0};
+    RyanW5500Socket *sock = NULL;
 
-    RyanW5500Socket *sock = RyanW5500SocketCreate(SOCK_DGRAM, IPPORT_DOMAIN);
+    sock = RyanW5500SocketCreate(SOCK_DGRAM, IPPORT_DOMAIN);
     if (NULL == sock)
     {
         LOG_W("dns socket失败");

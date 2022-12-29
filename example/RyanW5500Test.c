@@ -34,6 +34,7 @@ int w5500Start(int argc, char *argv[])
     if (NULL != RyanNetdev)
     {
         ulog_w(TAG, "w5500已经启动,不要重复选择");
+        return -1;
     }
 
     wiz_NetInfo netInfo = {0};
@@ -158,7 +159,7 @@ void tcpEchoTask(void *argument)
         bind(sockfd, (struct sockaddr *)&my_addr, sizeof(my_addr));
 
         // 使用listen创建连接队列 主动变被动
-        listen(sockfd, 4);
+        listen(sockfd, 2);
 
         while (1)
         {
@@ -282,7 +283,7 @@ void multicastEchoServiceTask(void *argument)
         ulog_i(TAG, "multicast, 消息来自: %s, port: %hu", inet_ntoa(from_addr.sin_addr), ntohs(from_addr.sin_port));
         ulog_i(TAG, "multicast, len: %d, msg: %s", len, buf);
 
-        // 默认只会发送给多播组，这是w5500硬件限制的，如果想单播回复组播收到的信息，需要重新创建socket
+        // socket加入多播组后，sendto消息只能发送给多播组，这是w5500硬件限制的，如果想单播回复组播收到的信息，需要重新创建socket
         // sendto(sockfd, "hellow", strlen("hellow"), 0, (struct sockaddr *)&from_addr, sizeof(from_addr));
 
         int sockfd2 = socket(AF_INET, SOCK_DGRAM, 0);
@@ -535,9 +536,10 @@ static int w5500Broadcast(int argc, char *argv[])
 
 /**
  * @brief
- * !注意：RyanW5500组播实现不支持加入多个组播组，这是由W5500硬件限制的，和tcp服务器一样。
- * !虽然可以通过申请多个socket, 再将数据合并实现，但考虑多组播功能并不常用，且实现较为复杂占资源，暂时没有实现多组播
+ * !注意：RyanW5500 socket组播实现不支持加入多个组播组，这是由W5500硬件限制的.
+ * !这和tcp服务器一样,虽然可以像tcp listen一样实现多组播，但考虑多组播功能并不常用，且实现较为复杂且占资源，暂时没有实现多组播
  * !目前如果需要加入多个组播的话，就申请多个socket分别加入组播组吧
+ * !socket加入多播组后，sendto消息只能发送给多播组，这是w5500硬件限制的，如果想单播回复组播收到的信息，需要重新创建socket
  *
  * @param argc
  * @param argv
@@ -629,7 +631,6 @@ static int w5500GetHostByName(int argc, char *argv[])
 
     if (0 == choice)
     {
-
         struct hostent *hent;
         hent = gethostbyname(nameStr);
 
@@ -652,7 +653,7 @@ static int w5500GetHostByName(int argc, char *argv[])
 
     else
     {
-        char buf[1024];
+        char buf[512];
         int ret;
         struct hostent hostinfo, *phost;
 
@@ -732,8 +733,8 @@ static int w5500Help(int argc, char *argv[]);
 static const struct RyanMqttCmdDes cmdTab[] = {
     {"help", "打印帮助信息", w5500Help},
     {"start", "打印帮助信息", w5500Start},
-    {"static", "netdev设置w5500静态地址,启动echo服务器后不要调用,调用会关闭所有socket", w5500Static},
-    {"dhcp", "netdev设置w5500 dhcp,启动echo服务器后不要调用,调用会关闭所有socket", w5500Dhcp},
+    {"static", "netdev设置w5500静态地址,如果触发了ip变化,会关闭所有已连接socket", w5500Static},
+    {"dhcp", "netdev设置w5500 dhcp,如果触发了ip变化,会关闭所有已连接socket", w5500Dhcp},
     {"udpClient", "w5500 udp客户端 param: ip, port", w5500UdpClient},
     {"udpService", "w5500 udp echo服务器 param: port", w5500UdpService},
     {"tcpClient", "w5500 tcp客户端 param: ip, port", w5500TcpClient},
@@ -801,7 +802,7 @@ static int RyanW5500SpiArrach(void)
 
     return result;
 }
-INIT_DEVICE_EXPORT(RyanW5500SpiArrach); // 导出到自动初始化
+INIT_DEVICE_EXPORT(RyanW5500SpiArrach); // spi总线挂载
 
 #if defined(RT_USING_MSH)
 MSH_CMD_EXPORT_ALIAS(RyanMqttMsh, w5500, RyanMqtt command);
