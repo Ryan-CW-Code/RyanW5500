@@ -58,5 +58,5 @@ RyanW5500 实现了部分常用BSD socket API。
 
 ### 6、声明
 
-无
+使用遇到问题可以提issue / RT-Thread社区提问，谢谢。
 
