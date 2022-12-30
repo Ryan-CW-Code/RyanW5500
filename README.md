@@ -14,7 +14,7 @@ RyanW5500 实现了部分常用BSD socket API。
 
 暂时只支持W5500，手上只有W5500。
 
-实现中能用wizchip接口的全部使用wizchip接口，方便移植到wiz另外的芯片平台。
+实现中能用wizchip接口的全部使用wizchip接口，方便移植到wiz其余芯片平台。
 
 待补充
 
@@ -28,14 +28,15 @@ RyanW5500 实现了部分常用BSD socket API。
 
 ![image-20221228130036255](docs/assert/README.assert/image-20221228130036255.png)
 
+- **Enable RyanW5500 example**：配置启动RyanW5500示例
 - **SPI device name**：配置使用 SPI 的设备名称（用户要提前把spi设备挂载到总线上）
 - **Reset PIN number**：配置设备连接的复位引脚号（根据实际使用引脚号修改）
 - **IRQ PIN number**：配置设备连接的中断引脚号（根据实际使用引脚号修改）
-- **Version**：软件包版本选择
+- **Version**：软件包版本选择（正式版没发布之前，推荐使用latest，会及时的修复bug）
 
-详细使用请参考example，提供了一些测试接口和使用范例
+**详细使用请参考example，提供了一些测试接口和使用范例**
 
-![image-20221228125154417](docs/assert/README.assert/image-20221228125154417.png)
+![image-20221230092752108](docs/assert/README.assert/image-20221230092752108.png)
 
 下图为使用udp echo服务器和tcp echo服务器发送数据测试，
 
@@ -43,7 +44,7 @@ RyanW5500 实现了部分常用BSD socket API。
 
 二个tcp客户端 40 / 30ms轮询发送
 
-结果还是蛮稳定的
+结果还是蛮稳定的，使用f407cpu占用在20%左右，开启dma会更好点。
 
 ![7acf3c006ac8787302f5a72f5a6c1b6](docs/assert/README.assert/7acf3c006ac8787302f5a72f5a6c1b6.png)
 

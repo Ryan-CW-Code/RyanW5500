@@ -732,7 +732,7 @@ static int w5500Help(int argc, char *argv[]);
 
 static const struct RyanMqttCmdDes cmdTab[] = {
     {"help", "打印帮助信息", w5500Help},
-    {"start", "打印帮助信息", w5500Start},
+    {"start", "启动RyanW5500", w5500Start},
     {"static", "netdev设置w5500静态地址,如果触发了ip变化,会关闭所有已连接socket", w5500Static},
     {"dhcp", "netdev设置w5500 dhcp,如果触发了ip变化,会关闭所有已连接socket", w5500Dhcp},
     {"udpClient", "w5500 udp客户端 param: ip, port", w5500UdpClient},
