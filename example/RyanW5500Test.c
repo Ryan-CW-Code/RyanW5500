@@ -12,12 +12,11 @@
 #include <rtdbg.h>
 #include "ulog.h"
 #include "RyanW5500.h"
-#include "sys/socket.h"
 #include "netdb.h"
-#include "sal_socket.h"
-#include "sal_netdb.h"
+
 #include "netdev_ipaddr.h"
 #include "netdev.h"
+#include "sys/socket.h"
 
 #ifdef PKG_USING_RYANW5500_EXAMPLE
 static const char *TAG = "RyanW5500Test";
@@ -795,15 +794,15 @@ static int RyanMqttMsh(int argc, char *argv[])
 // stm32用户需要更改此代码为自己w5500实际挂载的spi总线
 // 非stm32用户可以调用rt_spi_bus_attach_device，
 // 参考连接:https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/spi/spi?id=%e6%8c%82%e8%bd%bd-spi-%e8%ae%be%e5%a4%87
-static int RyanW5500SpiArrach(void)
-{
-    rt_err_t result = rt_hw_spi_device_attach("spi2", RYANW5500_SPI_DEVICE, GPIOE, GPIO_PIN_15);
-    if (RT_EOK != result)
-        rt_kprintf("RyanW5500 SPI init fail!!!!!");
-
-    return result;
-}
-INIT_DEVICE_EXPORT(RyanW5500SpiArrach); // spi总线挂载
+//static int RyanW5500SpiArrach(void)
+//{
+//    rt_err_t result = rt_hw_spi_device_attach("spi2", RYANW5500_SPI_DEVICE, GPIOE, GPIO_PIN_15);
+//    if (RT_EOK != result)
+//        rt_kprintf("RyanW5500 SPI init fail!!!!!");
+//
+//    return result;
+//}
+//INIT_DEVICE_EXPORT(RyanW5500SpiArrach); // spi总线挂载
 
 #if defined(RT_USING_MSH)
 MSH_CMD_EXPORT_ALIAS(RyanMqttMsh, w5500, RyanMqtt command);

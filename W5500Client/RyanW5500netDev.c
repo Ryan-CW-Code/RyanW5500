@@ -116,9 +116,9 @@ static int RyanW5500NetdevPing(struct netdev *netdev, const char *host, size_t d
  * @param netdev
  * @return int
  */
-static int RyanW5500NetdevNetstat(struct netdev *netdev)
+static void RyanW5500NetdevNetstat(struct netdev *netdev)
 {
-    return 0;
+    return ;
 }
 
 // netdev设备操作

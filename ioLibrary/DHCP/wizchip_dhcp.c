@@ -154,7 +154,7 @@ uint8_t OLD_allocated_ip[4] = {0}; // 以前的 IP 地址
 wizchipDhcpState_e dhcp_state = STATE_DHCP_INIT; // DHCP 状态
 platformTimer_t dhcp_lease_time = {0};           // dhcp租期定时器
 uint32_t DHCP_XID;                               // 任何数字
-uint8_t *HOST_NAME = DCHP_HOST_NAME;             // 主机名
+uint8_t *HOST_NAME = (uint8_t*)DCHP_HOST_NAME;             // 主机名
 RIP_MSG *pDHCPMSG;                               // DHCP 处理的缓冲区指针
 
 char NibbleToHex(uint8_t nibble)

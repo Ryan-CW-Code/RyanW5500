@@ -14,13 +14,11 @@ extern "C"
 #include <ctype.h>
 #include <errno.h>
 
+#include <netdb.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <sys/errno.h>
 #include <sys/time.h>
 #include "sal.h"
-#include "sal_netdb.h"
-
 #include "netdev_ipaddr.h"
 #include "netdev.h"
 

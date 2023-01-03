@@ -1483,6 +1483,7 @@ int wiz_getaddrinfo(const char *nodename, const char *servname, const struct add
     return 0;
 }
 
+
 void wiz_freeaddrinfo(struct addrinfo *ai)
 {
     struct addrinfo *next = NULL;
