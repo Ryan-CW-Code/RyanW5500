@@ -8,6 +8,7 @@
 
 #include <rtthread.h>
 #include <rtdevice.h>
+#include "drv_spi.h"
 #include <rtdbg.h>
 #include "ulog.h"
 #include "RyanW5500.h"
@@ -104,10 +105,10 @@ int w5500Start(int argc, char *argv[])
 }
 
 // TCP并发ECHO服务器
-void *deal_client_fun(void *arg)
+void deal_client_fun(void *argument)
 {
 
-    int fd = *(int *)arg; // 通过arg获得已连接套接字
+    int fd = *(int *)argument; // 通过arg获得已连接套接字
     char buf[512] = {0};
 
     // struct timeval tv = {
@@ -131,7 +132,7 @@ void *deal_client_fun(void *arg)
             }
 
             ulog_e(TAG, "遇到错误, 退出 socket: %d, len: %d", fd, len);
-            close(fd);
+            closesocket(fd);
             return;
         }
 
@@ -179,7 +180,7 @@ void tcpEchoTask(void *argument)
         }
 
         // 关闭监听套接字
-        close(sockfd);
+        closesocket(sockfd);
     }
 }
 
@@ -232,7 +233,7 @@ void udpEchoServiceTask(void *argument)
     }
 
     // 关闭套接字
-    close(sockfd);
+    closesocket(sockfd);
 }
 
 void multicastEchoServiceTask(void *argument)
@@ -291,12 +292,12 @@ void multicastEchoServiceTask(void *argument)
                                        .sin_port = from_addr.sin_port,
                                        .sin_addr.s_addr = from_addr.sin_addr.s_addr};
         sendto(sockfd2, buf, len, 0, (struct sockaddr *)&ser_addr, sizeof(ser_addr));
-        close(sockfd2); // 关闭套接字
+        closesocket(sockfd2); // 关闭套接字
 
         memset(buf, 0, len);
     }
 
-    close(sockfd);
+    closesocket(sockfd);
 }
 
 static int w5500Static(int argc, char *argv[])
@@ -357,7 +358,7 @@ static int w5500UdpClient(int argc, char *argv[])
            0, (struct sockaddr *)&ser_addr, sizeof(ser_addr));
 
     // 关闭套接字
-    close(sockfd);
+    closesocket(sockfd);
     return 0;
 }
 
@@ -449,7 +450,7 @@ static int w5500TcpClient(int argc, char *argv[])
     }
 
     // 关闭套接字
-    close(sockfd);
+    closesocket(sockfd);
     return 0;
 }
 
@@ -528,7 +529,7 @@ static int w5500Broadcast(int argc, char *argv[])
     sendto(sockfd, msg, strlen(msg), 0,
            (struct sockaddr *)&dst_addr, sizeof(dst_addr));
 
-    close(sockfd);
+    closesocket(sockfd);
 
     ulog_i(TAG, "broadcast发送成功");
     return 0;
@@ -730,7 +731,7 @@ struct RyanMqttCmdDes
 
 static int w5500Help(int argc, char *argv[]);
 
-static const struct RyanMqttCmdDes cmdTab[] = {
+static struct RyanMqttCmdDes cmdTab[] = {
     {"help", "打印帮助信息", w5500Help},
     {"start", "启动RyanW5500", w5500Start},
     {"static", "netdev设置w5500静态地址,如果触发了ip变化,会关闭所有已连接socket", w5500Static},

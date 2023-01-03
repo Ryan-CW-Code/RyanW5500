@@ -17,7 +17,7 @@ static struct rt_spi_device *RyanW5500SpiDevice = NULL;
  */
 int RyanW5500SpiInit()
 {
-    RyanW5500SpiDevice = rt_device_find(RYANW5500_SPI_DEVICE);
+    RyanW5500SpiDevice = (void*)rt_device_find(RYANW5500_SPI_DEVICE);
     if (RyanW5500SpiDevice == NULL)
     {
         LOG_E("You should attach [%s] into SPI bus firstly.", RYANW5500_SPI_DEVICE);
@@ -31,7 +31,7 @@ int RyanW5500SpiInit()
     };
     rt_spi_configure(RyanW5500SpiDevice, &cfg);
 
-    if (rt_device_open(RyanW5500SpiDevice, RT_DEVICE_OFLAG_RDWR) != RT_EOK)
+    if (rt_device_open((rt_device_t)RyanW5500SpiDevice, RT_DEVICE_OFLAG_RDWR) != RT_EOK)
     {
         LOG_E("open WIZnet SPI device %s error.", RYANW5500_SPI_DEVICE);
         return RT_ERROR;

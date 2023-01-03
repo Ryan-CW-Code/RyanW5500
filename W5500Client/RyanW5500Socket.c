@@ -383,7 +383,6 @@ int wiz_bind(int socket, const struct sockaddr *name, socklen_t namelen)
 
     RyanW5500Socket *sock = NULL;
     uint16_t port = 0;
-    ip_addr_t ipaddr = {0};
 
     RyanW5500CheckCode(NULL != name && 0 != namelen, EAFNOSUPPORT, { return -1; }); // 非法地址
 
@@ -392,7 +391,6 @@ int wiz_bind(int socket, const struct sockaddr *name, socklen_t namelen)
 
     // PRASE IP 地址和端口
     const struct sockaddr_in *sin = (const struct sockaddr_in *)name;
-    ipaddr.addr = sin->sin_addr.s_addr;
     port = (uint16_t)htons(sin->sin_port);
 
     if (sock->port == port)
