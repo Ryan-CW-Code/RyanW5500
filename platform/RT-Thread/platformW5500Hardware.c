@@ -17,7 +17,7 @@ static struct rt_spi_device *RyanW5500SpiDevice = NULL;
  */
 int RyanW5500SpiInit()
 {
-    RyanW5500SpiDevice = (void*)rt_device_find(RYANW5500_SPI_DEVICE);
+    RyanW5500SpiDevice = (void *)rt_device_find(RYANW5500_SPI_DEVICE);
     if (RyanW5500SpiDevice == NULL)
     {
         LOG_E("You should attach [%s] into SPI bus firstly.", RYANW5500_SPI_DEVICE);
@@ -47,11 +47,7 @@ int RyanW5500SpiInit()
  */
 void RyanW5500WriteByte(uint8_t data)
 {
-    struct rt_spi_message spiMsg = {
-        .send_buf = &data,
-        .length = 1};
-
-    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
+    rt_spi_send(RyanW5500SpiDevice, &data, 1);
 }
 
 /**
@@ -62,11 +58,7 @@ void RyanW5500WriteByte(uint8_t data)
 uint8_t RyanW5500ReadByte(void)
 {
     uint8_t data;
-    struct rt_spi_message spiMsg = {
-        .recv_buf = &data,
-        .length = 1};
-
-    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
+    rt_spi_recv(RyanW5500SpiDevice, &data, 1);
 
     return data;
 }
@@ -79,11 +71,7 @@ uint8_t RyanW5500ReadByte(void)
  */
 void RyanW5500WriteBurst(uint8_t *pbuf, uint16_t len)
 {
-    struct rt_spi_message spiMsg = {
-        .send_buf = pbuf,
-        .length = len};
-
-    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
+    rt_spi_send(RyanW5500SpiDevice, pbuf, len);
 }
 
 /**
@@ -94,12 +82,7 @@ void RyanW5500WriteBurst(uint8_t *pbuf, uint16_t len)
  */
 void RyanW5500ReadBurst(uint8_t *pbuf, uint16_t len)
 {
-
-    struct rt_spi_message spiMsg = {
-        .recv_buf = pbuf,
-        .length = len};
-
-    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
+    rt_spi_recv(RyanW5500SpiDevice, pbuf, len);
 }
 
 /**
