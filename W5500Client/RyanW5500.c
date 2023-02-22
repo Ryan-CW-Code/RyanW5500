@@ -1,7 +1,7 @@
 #define DBG_ENABLE
 
 #define DBG_SECTION_NAME ("w5500")
-#define DBG_LEVEL LOG_LVL_INFO
+#define DBG_LEVEL LOG_LVL_DBG
 #define DBG_COLOR
 
 #include "RyanW5500Store.h"
@@ -64,6 +64,7 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
 
         gWIZNETINFO.dhcp = netdev_is_dhcp_enabled(netdev) ? NETINFO_DHCP : NETINFO_STATIC;
         MaintainFlag = 0;
+
         goto next;
     }
 
@@ -127,9 +128,6 @@ next:
     }
 
     RyanW5500NetDevInfoUpdate(netdev);
-
-    if (PHY_LINK_ON != linkState)
-        return -1;
 
     uint16_t ret = 0xff;     // 启用所有socket通道中断
     ret = (ret << 8) + 0x00; // 禁用所有通用中断，不使用
@@ -248,6 +246,8 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
     RyanW5500Entry.W5500EventHandle = rt_event_create("RyanW5500Event", RT_IPC_FLAG_PRIO);
     RyanW5500AttachIRQ(RyanW5500IRQCallback); // 绑定w5500中断回调函数
 
+    netdev = RyanW5500NetdevRegister("RyanW5500"); // W5500
+    netdev_low_level_set_status(netdev, RT_TRUE);  // 设置网络接口设备状态
     // 检查w5500连接是否正常
     while (1)
     {
@@ -266,9 +266,6 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
         LOG_E("Wiznet chip not detected");
         delay(1000);
     }
-
-    netdev = RyanW5500NetdevRegister("RyanW5500"); // W5500
-    netdev_low_level_set_status(netdev, RT_TRUE);  // 设置网络接口设备状态
 
     RyanW5500Entry.w5500TaskHandle = rt_thread_create("RyanW5500",    // 线程name
                                                       wizIntDataTask, // 线程入口函数

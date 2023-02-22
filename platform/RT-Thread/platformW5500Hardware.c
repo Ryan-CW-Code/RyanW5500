@@ -47,7 +47,11 @@ int RyanW5500SpiInit()
  */
 void RyanW5500WriteByte(uint8_t data)
 {
-    rt_spi_send(RyanW5500SpiDevice, &data, 1);
+    struct rt_spi_message spiMsg = {
+        .send_buf = &data,
+        .length = 1};
+
+    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
 }
 
 /**
@@ -58,7 +62,11 @@ void RyanW5500WriteByte(uint8_t data)
 uint8_t RyanW5500ReadByte(void)
 {
     uint8_t data;
-    rt_spi_recv(RyanW5500SpiDevice, &data, 1);
+    struct rt_spi_message spiMsg = {
+        .recv_buf = &data,
+        .length = 1};
+
+    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
 
     return data;
 }
@@ -71,7 +79,11 @@ uint8_t RyanW5500ReadByte(void)
  */
 void RyanW5500WriteBurst(uint8_t *pbuf, uint16_t len)
 {
-    rt_spi_send(RyanW5500SpiDevice, pbuf, len);
+    struct rt_spi_message spiMsg = {
+        .send_buf = pbuf,
+        .length = len};
+
+    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
 }
 
 /**
@@ -82,7 +94,12 @@ void RyanW5500WriteBurst(uint8_t *pbuf, uint16_t len)
  */
 void RyanW5500ReadBurst(uint8_t *pbuf, uint16_t len)
 {
-    rt_spi_recv(RyanW5500SpiDevice, pbuf, len);
+
+    struct rt_spi_message spiMsg = {
+        .recv_buf = pbuf,
+        .length = len};
+
+    rt_spi_transfer_message(RyanW5500SpiDevice, &spiMsg);
 }
 
 /**

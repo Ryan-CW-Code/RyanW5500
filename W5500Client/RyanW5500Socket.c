@@ -1,7 +1,7 @@
 #define DBG_ENABLE
 
 #define DBG_SECTION_NAME ("RyanW5500Socket")
-#define DBG_LEVEL LOG_LVL_INFO
+#define DBG_LEVEL LOG_LVL_DBG
 #define DBG_COLOR
 
 #include "RyanW5500Store.h"
@@ -344,7 +344,7 @@ int wiz_socket(int domain, int type, int protocol)
     // 该实现不支持指定的协议族类型。
     RyanW5500CheckCode(AF_INET == domain || AF_WIZ == domain, EAFNOSUPPORT, { return -1; });
     // 不支持特定的运输层协议
-    RyanW5500CheckCode(0 == protocol, EPROTONOSUPPORT, { return -1; });
+    // RyanW5500CheckCode(0 == protocol, EPROTONOSUPPORT, { return -1; });
 
     switch (type)
     {
@@ -899,9 +899,15 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
                 sock->soOptionsFlag &= ~optname;
             break;
 
-        // 暂不实现
         case SO_KEEPALIVE: // 为套接字连接启用保持连接。 仅适用于支持保持连接的协议，比如tcp, 对于 TCP，默认保持连接超时为 2 小时，保持连接间隔为 1 秒  布尔类型
-            return -1;
+        {
+            if (sock->type != Sn_MR_TCP) // 对于w5500非tcp连接忽略
+                break;
+            uint32_t keepalive = 2 * 60 * 60 / 5; // w5500 Sn_KPALVTR单位时间为5
+            if (1 == *(int *)optval)
+                RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_KEEPALIVEAUTO, (void *)&keepalive), EINVAL, { return -1; });
+            break;
+        }
 
         case SO_RCVTIMEO: // 阻止接收调用的超时（以毫秒为单位）。 此选项的默认值为零，表示接收操作不会超时 类型struct timeval
             RyanW5500CheckCode(sizeof(struct timeval) == optlen, EFAULT, { return -1; });
@@ -1178,6 +1184,7 @@ int RyanW5500_gethostbyname(const char *name, ip_addr_t *addr)
         uint8_t remote_ip[4] = {0};
         uint8_t data_buffer[512];
 
+        ulog_w("TAG", "%s:%d 开始获取dns", __FILE__, __LINE__);
         // DNS客户端处理
         ret = DNS_run(gWIZNETINFO.dns, (uint8_t *)name, remote_ip, data_buffer);
         if (1 != ret)
@@ -1482,7 +1489,6 @@ int wiz_getaddrinfo(const char *nodename, const char *servname, const struct add
     *res = ai;
     return 0;
 }
-
 
 void wiz_freeaddrinfo(struct addrinfo *ai)
 {
