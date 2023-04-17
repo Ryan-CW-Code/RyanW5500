@@ -1,7 +1,7 @@
 #define DBG_ENABLE
 
 #define DBG_SECTION_NAME ("RyanW5500Socket")
-#define DBG_LEVEL LOG_LVL_DBG
+#define DBG_LEVEL LOG_LVL_INFO
 #define DBG_COLOR
 
 #include "RyanW5500Store.h"

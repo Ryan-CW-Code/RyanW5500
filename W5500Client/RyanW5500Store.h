@@ -53,7 +53,7 @@ extern "C"
 #define RyanW5500CheckCode(EX, ErrorCode, code)                    \
     if (!(EX))                                                     \
     {                                                              \
-        LOG_I("%s:%d ErrorCode: %d, strError: %s",                 \
+        LOG_D("%s:%d ErrorCode: %d, strError: %s",                 \
               __FILE__, __LINE__, ErrorCode, strerror(ErrorCode)); \
         RyanW5500SetErrno(ErrorCode);                              \
         {                                                          \

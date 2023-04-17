@@ -1,7 +1,7 @@
 #define DBG_ENABLE
 
 #define DBG_SECTION_NAME ("w5500")
-#define DBG_LEVEL LOG_LVL_DBG
+#define DBG_LEVEL LOG_LVL_INFO
 #define DBG_COLOR
 
 #include "RyanW5500Store.h"
@@ -13,6 +13,7 @@
  */
 void RyanW5500IRQCallback(void *argument)
 {
+    LOG_D("中断");
     rt_event_send(RyanW5500Entry.W5500EventHandle, RyanW5500IRQBit);
 }
 
@@ -146,8 +147,27 @@ static void wizIntDataTask(void *parameter)
             sn_ir = 0;
     uint16_t intr = 0;
     struct netdev *netdev = (struct netdev *)parameter;
-
     platformTimer_t netWorkTimer = {0};
+
+    // 检查w5500连接是否正常
+    while (1)
+    {
+        // 超时中断触发为retry_cnt * time_100us * 100us
+        struct wiz_NetTimeout_t net_timeout = {
+            .retry_cnt = 5,      // 重试次数
+            .time_100us = 2000}; // 200ms认为失败
+        ctlnetwork(CN_SET_TIMEOUT, (void *)&net_timeout);
+
+        memset(&net_timeout, 0, sizeof(struct wiz_NetTimeout_t));
+
+        ctlnetwork(CN_GET_TIMEOUT, (void *)&net_timeout);
+        if (5 == net_timeout.retry_cnt && 2000 == net_timeout.time_100us)
+            break;
+
+        LOG_E("Wiznet chip not detected");
+        delay(1000);
+    }
+
     platformTimerCutdown(&netWorkTimer, 0);
 
     while (1)
@@ -248,24 +268,6 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
 
     netdev = RyanW5500NetdevRegister("RyanW5500"); // W5500
     netdev_low_level_set_status(netdev, RT_TRUE);  // 设置网络接口设备状态
-    // 检查w5500连接是否正常
-    while (1)
-    {
-        // 超时中断触发为retry_cnt * time_100us * 100us
-        struct wiz_NetTimeout_t net_timeout = {
-            .retry_cnt = 5,      // 重试次数
-            .time_100us = 2000}; // 200ms认为失败
-        ctlnetwork(CN_SET_TIMEOUT, (void *)&net_timeout);
-
-        memset(&net_timeout, 0, sizeof(struct wiz_NetTimeout_t));
-
-        ctlnetwork(CN_GET_TIMEOUT, (void *)&net_timeout);
-        if (5 == net_timeout.retry_cnt && 2000 == net_timeout.time_100us)
-            break;
-
-        LOG_E("Wiznet chip not detected");
-        delay(1000);
-    }
 
     RyanW5500Entry.w5500TaskHandle = rt_thread_create("RyanW5500",    // 线程name
                                                       wizIntDataTask, // 线程入口函数
