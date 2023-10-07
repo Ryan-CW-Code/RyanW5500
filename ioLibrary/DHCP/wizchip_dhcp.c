@@ -1,13 +1,10 @@
+#define rlogEnable 1               // 是否使能日志
+#define rlogColorEnable 1          // 是否使能日志颜色
+#define rlogLevel (rlogLvlWarning) // 日志打印等级
+#define rlogTag "W5500Dhcp"        // 日志tag
 
 #include "wizchip_socket.h"
 #include "wizchip_dhcp.h"
-
-#define DBG_ENABLE
-
-#define DBG_SECTION_NAME "dhcp"
-#define DBG_LEVEL DBG_WARNING
-#define DBG_COLOR
-
 #include <stdio.h>
 #include <string.h>
 #include "RyanW5500Store.h"
@@ -154,7 +151,7 @@ uint8_t OLD_allocated_ip[4] = {0}; // 以前的 IP 地址
 wizchipDhcpState_e dhcp_state = STATE_DHCP_INIT; // DHCP 状态
 platformTimer_t dhcp_lease_time = {0};           // dhcp租期定时器
 uint32_t DHCP_XID;                               // 任何数字
-uint8_t *HOST_NAME = (uint8_t*)DCHP_HOST_NAME;             // 主机名
+uint8_t *HOST_NAME = (uint8_t *)DCHP_HOST_NAME;  // 主机名
 RIP_MSG *pDHCPMSG;                               // DHCP 处理的缓冲区指针
 
 char NibbleToHex(uint8_t nibble)
@@ -270,7 +267,7 @@ void send_DHCP_DISCOVER(void)
     for (i = k; i < OPT_SIZE; i++)
         pDHCPMSG->OPT[i] = 0;
 
-    LOG_D("> Send DHCP_DISCOVER");
+    rlog_d("> Send DHCP_DISCOVER");
 
     // 广播发送
     wizchip_sendto(DHCP_SOCKET, (uint8_t *)pDHCPMSG, RIP_MSG_SIZE, ip, DHCP_SERVER_PORT);
@@ -354,7 +351,7 @@ void send_DHCP_REQUEST(void)
     for (i = k; i < OPT_SIZE; i++)
         pDHCPMSG->OPT[i] = 0;
 
-    LOG_D("> Send DHCP_REQUEST");
+    rlog_d("> Send DHCP_REQUEST");
 
     wizchip_sendto(DHCP_SOCKET, (uint8_t *)pDHCPMSG, RIP_MSG_SIZE, ip, DHCP_SERVER_PORT);
 }
@@ -405,7 +402,7 @@ void send_DHCP_DECLINE(void)
     // 发送广播包
     memset(ip, 0xFF, 4);
 
-    LOG_D("> Send DHCP_DECLINE");
+    rlog_d("> Send DHCP_DECLINE");
 
     wizchip_sendto(DHCP_SOCKET, (uint8_t *)pDHCPMSG, RIP_MSG_SIZE, ip, DHCP_SERVER_PORT);
 }
@@ -430,7 +427,7 @@ int8_t parseDHCPMSG(void)
         return 0;
 
     len = wizchip_recvfrom(DHCP_SOCKET, (uint8_t *)pDHCPMSG, len, svr_addr, &svr_port);
-    LOG_D("DHCP message : %d.%d.%d.%d(%d) %d received. ", svr_addr[0], svr_addr[1], svr_addr[2], svr_addr[3], svr_port, len);
+    rlog_d("DHCP message : %d.%d.%d.%d(%d) %d received. ", svr_addr[0], svr_addr[1], svr_addr[2], svr_addr[3], svr_port, len);
 
     if (DHCP_SERVER_PORT != svr_port)
         return 0;
@@ -438,7 +435,7 @@ int8_t parseDHCPMSG(void)
     // 校验mac地址
     if (0 != memcmp(gWIZNETINFO.mac, pDHCPMSG->chaddr, sizeof(gWIZNETINFO.mac)))
     {
-        LOG_D("No My DHCP Message. This message is ignored.");
+        rlog_d("No My DHCP Message. This message is ignored.");
         return 0;
     }
 
@@ -448,7 +445,7 @@ int8_t parseDHCPMSG(void)
         if (0 != memcmp(DHCP_SIP, svr_addr, sizeof(DHCP_SIP)) &&
             0 != memcmp(DHCP_REAL_SIP, svr_addr, sizeof(DHCP_REAL_SIP)))
         {
-            LOG_D("Another DHCP sever send a response message. This is ignored.");
+            rlog_d("Another DHCP sever send a response message. This is ignored.");
             return 0;
         }
     }
@@ -567,7 +564,7 @@ int8_t check_DHCP_leasedIP(void)
     if (ret == SOCKERR_TIMEOUT)
     {
         // UDP 发送超时发生：分配的 IP 地址是唯一的，DHCP 成功
-        LOG_D("> Check leased IP - OK");
+        rlog_d("> Check leased IP - OK");
         return 1;
     }
     else
@@ -598,7 +595,7 @@ uint8_t DHCP_run(uint8_t flag)
     sock = RyanW5500SocketCreate(Sn_MR_UDP, DHCP_CLIENT_PORT);
     if (NULL == sock)
     {
-        LOG_W("dhcp socket失败");
+        rlog_w("dhcp socket失败");
         return -1;
     }
 
@@ -643,7 +640,7 @@ uint8_t DHCP_run(uint8_t flag)
         case STATE_DHCP_DISCOVER:
             if (DHCP_OFFER == type) // 服务器提供地址续约，offer报文
             {
-                LOG_D("> Receive DHCP_OFFER");
+                rlog_d("> Receive DHCP_OFFER");
                 memcpy(gWIZNETINFO.ip, pDHCPMSG->yiaddr, sizeof(gWIZNETINFO.ip));
                 send_DHCP_REQUEST(); // 发送请求地址租用 request报文
                 dhcp_state = STATE_DHCP_REQUEST;
@@ -654,13 +651,13 @@ uint8_t DHCP_run(uint8_t flag)
         case STATE_DHCP_REQUEST:  // 客户端选择并请求地址租用
             if (DHCP_NAK == type) // 服务器取消把地址租用给客户端
             {
-                LOG_D("> Receive DHCP_NACK");
+                rlog_d("> Receive DHCP_NACK");
                 dhcp_state = STATE_DHCP_DISCOVER;
             }
 
             else if (DHCP_ACK == type) // 服务器确认将地址租用给客户端 ack报文
             {
-                LOG_D("> Receive DHCP_ACK");
+                rlog_d("> Receive DHCP_ACK");
                 // 发生 IP 地址冲突
                 dhcp_state = check_DHCP_leasedIP() ? STATE_DHCP_LEASED : STATE_DHCP_INIT;
             }
@@ -670,7 +667,7 @@ uint8_t DHCP_run(uint8_t flag)
         case STATE_DHCP_LEASED: // 当租期超过50%（1/2）时，客户端会以单播形式向DHCP服务器发送DHCP Request报文来续租IP地址。
             if (dhcp_lease_time.timeOut != 0 && platformTimerRemain(&dhcp_lease_time) < (dhcp_lease_time.timeOut / 2))
             {
-                LOG_D("> Maintains the IP address ");
+                rlog_d("> Maintains the IP address ");
                 DHCP_XID++;
                 send_DHCP_REQUEST();
 
@@ -682,12 +679,12 @@ uint8_t DHCP_run(uint8_t flag)
             if (type == DHCP_ACK)
             {
                 // 不需要判断续租分配的新ip还是旧ip，都会写入到w5500寄存器里
-                LOG_D("> Receive DHCP_ACK, Maintains the IP address");
+                rlog_d("> Receive DHCP_ACK, Maintains the IP address");
                 dhcp_state = STATE_DHCP_LEASED;
             }
             else if (type == DHCP_NAK)
             {
-                LOG_D("> Receive DHCP_NACK, Failed to maintain ip");
+                rlog_d("> Receive DHCP_NACK, Failed to maintain ip");
                 dhcp_state = STATE_DHCP_DISCOVER;
             }
 
@@ -706,17 +703,17 @@ uint8_t DHCP_run(uint8_t flag)
             switch (dhcp_state)
             {
             case STATE_DHCP_DISCOVER:
-                LOG_D("<<timeout>> state : STATE_DHCP_DISCOVER");
+                rlog_d("<<timeout>> state : STATE_DHCP_DISCOVER");
                 send_DHCP_DISCOVER();
                 break;
 
             case STATE_DHCP_REQUEST:
-                LOG_D("<<timeout>> state : STATE_DHCP_REQUEST");
+                rlog_d("<<timeout>> state : STATE_DHCP_REQUEST");
                 send_DHCP_REQUEST();
                 break;
 
             case STATE_DHCP_REREQUEST:
-                LOG_D("<<timeout>> state : STATE_DHCP_REREQUEST");
+                rlog_d("<<timeout>> state : STATE_DHCP_REREQUEST");
                 send_DHCP_REQUEST();
                 break;
 

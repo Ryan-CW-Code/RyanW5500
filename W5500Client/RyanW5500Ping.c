@@ -1,8 +1,7 @@
-#define DBG_ENABLE
-
-#define DBG_SECTION_NAME ("RyanW5500Ping")
-#define DBG_LEVEL LOG_LVL_INFO
-#define DBG_COLOR
+#define rlogEnable 1               // 是否使能日志
+#define rlogColorEnable 1          // 是否使能日志颜色
+#define rlogLevel (rlogLvlWarning) // 日志打印等级
+#define rlogTag "W5500Ping"        // 日志tag
 
 #include "RyanW5500Store.h"
 
@@ -151,7 +150,7 @@ static int wiz_ping_reply(int socket, struct sockaddr *from)
         break;
 
     default:
-        LOG_W("unknown ping receive message.");
+        rlog_w("unknown ping receive message.");
         return -1;
     }
 
@@ -167,7 +166,7 @@ int RyanW5500Ping(struct netdev *netdev, const char *host, size_t data_len, uint
     hostent = wiz_gethostbyname(host);
     if (NULL == hostent || NULL == hostent->h_addr_list[0])
     {
-        LOG_W("hostent is NULL.");
+        rlog_w("hostent is NULL.");
         return -RT_FALSE;
     }
 
@@ -177,7 +176,7 @@ int RyanW5500Ping(struct netdev *netdev, const char *host, size_t data_len, uint
     socket = wiz_socket(AF_WIZ, SOCK_RAW, 0);
     if (socket < 0)
     {
-        LOG_W("create ping socket(%d) failed.", socket);
+        rlog_w("create ping socket(%d) failed.", socket);
         return -1;
     }
 
@@ -188,11 +187,8 @@ int RyanW5500Ping(struct netdev *netdev, const char *host, size_t data_len, uint
                               .tv_usec = times % 1000 * 1000};
 
     // 设置接收和发送超时选项
-    wiz_setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout,
-                   sizeof(timeout));
-
-    wiz_setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (void *)&timeout,
-                   sizeof(timeout));
+    wiz_setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout, sizeof(timeout));
+    wiz_setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (void *)&timeout, sizeof(timeout));
 
     struct sockaddr_in server_addr = {.sin_family = AF_WIZ,
                                       .sin_port = htons(WIZ_PING_PORT),

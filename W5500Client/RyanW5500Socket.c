@@ -1,8 +1,7 @@
-#define DBG_ENABLE
-
-#define DBG_SECTION_NAME ("RyanW5500Socket")
-#define DBG_LEVEL LOG_LVL_INFO
-#define DBG_COLOR
+#define rlogEnable 1               // 是否使能日志
+#define rlogColorEnable 1          // 是否使能日志颜色
+#define rlogLevel (rlogLvlWarning) // 日志打印等级
+#define rlogTag "W5500Socket"      // 日志tag
 
 #include "RyanW5500Store.h"
 
@@ -30,7 +29,7 @@ int RyanW5500RecvDataCallback(int socket)
     RyanW5500Socket *sock = NULL;
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
     rt_event_send(RyanW5500Entry.W5500EventHandle, 1 << sock->socket);
     return 0;
@@ -47,7 +46,7 @@ int RyanW5500CloseCallback(int socket)
     RyanW5500Socket *sock = NULL;
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
     sock->state = RyanW5500SocketClose;
     rt_event_send(RyanW5500Entry.W5500EventHandle, 1 << sock->socket);
@@ -62,8 +61,8 @@ int RyanW5500CloseCallback(int socket)
  */
 void inAddrToipStrArr(in_addr_t *s_addr, uint8_t *ipStrArr)
 {
-    assert(NULL != s_addr);
-    assert(NULL != ipStrArr);
+    RT_ASSERT(NULL != s_addr);
+    RT_ASSERT(NULL != ipStrArr);
 
     // inet_pton(AF_INET, inet_ntoa(sin->sin_addr), &ipStrArr); // 效率有点低
     uint8_t *p = (uint8_t *)s_addr;
@@ -81,7 +80,7 @@ void inAddrToipStrArr(in_addr_t *s_addr, uint8_t *ipStrArr)
  */
 in_addr_t ipStrArrToinAddr(uint8_t *ipStrArr)
 {
-    assert(NULL != ipStrArr);
+    RT_ASSERT(NULL != ipStrArr);
 
     // 效率有点低
     // char remote_ipaddr[16] = {0};
@@ -106,11 +105,17 @@ in_addr_t ipStrArrToinAddr(uint8_t *ipStrArr)
 RyanW5500Socket *RyanW5500GetSock(int socket)
 {
     if (socket < 0 || socket >= RyanW5500MaxSocketNum)
+    {
+        rlog_w("socket 越界");
         return NULL;
+    }
 
     // 检查套接字结构是否有效
     if (RyanW5500Sockets[socket].magic != WIZ_SOCKET_MAGIC)
+    {
+        rlog_w("套接字结构无效");
         return NULL;
+    }
 
     return &RyanW5500Sockets[socket];
 }
@@ -123,24 +128,24 @@ RyanW5500Socket *RyanW5500GetSock(int socket)
  */
 RyanW5500Socket *RyanW5500CreateListenClient(RyanW5500Socket *serviceSock)
 {
-    assert(NULL != serviceSock);
+    RT_ASSERT(NULL != serviceSock);
 
     RyanW5500Socket *clientSock = NULL;
     RyanW5500ClientInfo *clientInfo = NULL;
     clientSock = RyanW5500SocketCreate(serviceSock->type, serviceSock->port);
-    RyanW5500CheckCode(NULL != clientSock, EMFILE, { goto err; });
+    RyanW5500CheckCode(NULL != clientSock, EMFILE, rlog_d, { goto err; });
 
     clientSock->serviceSocket = serviceSock->socket;
 
     // 创建客户端信息并将客户端添加到服务器clientList
     clientInfo = (RyanW5500ClientInfo *)malloc(sizeof(RyanW5500ClientInfo));
-    RyanW5500CheckCode(NULL != clientInfo, ENOMEM, { goto err; });
+    RyanW5500CheckCode(NULL != clientInfo, ENOMEM, rlog_d, { goto err; });
     memset(clientInfo, 0, sizeof(RyanW5500ClientInfo));
 
     clientInfo->sock = clientSock;
     RyanListAddTail(&clientInfo->list, &serviceSock->serviceInfo->clientList);
 
-    RyanW5500CheckCode(SOCK_OK == wizchip_listen(clientSock->socket), EPROTO, {wiz_closesocket(clientSock->socket); goto err; });
+    RyanW5500CheckCode(SOCK_OK == wizchip_listen(clientSock->socket), EPROTO, rlog_d, {wiz_closesocket(clientSock->socket); goto err; });
     clientSock->state = RyanW5500SocketListen;
 
     return clientSock;
@@ -158,8 +163,9 @@ static void RyanW5500ListenSocketDestory(RyanW5500Socket *sock)
 {
 
     RyanW5500Socket *serviceSock = RyanW5500GetSock(sock->serviceSocket);
-    assert(NULL != serviceSock);
-    assert(NULL != serviceSock->serviceInfo && sock->port == serviceSock->port);
+    RT_ASSERT(NULL != serviceSock);
+    RT_ASSERT(NULL != serviceSock->serviceInfo);
+    RT_ASSERT(sock->port == serviceSock->port);
 
     // 分配并初始化新的客户端套接字
     RyanList_t *curr = NULL,
@@ -170,22 +176,22 @@ static void RyanW5500ListenSocketDestory(RyanW5500Socket *sock)
     {
         // 获取此节点的结构体
         clientInfo = RyanListEntry(curr, RyanW5500ClientInfo, list);
-        assert(NULL != clientInfo);
+        RT_ASSERT(NULL != clientInfo);
         if (clientInfo->sock->socket != sock->socket)
             continue;
 
         RyanListDel(&clientInfo->list);
 
-        // 增加listen客户端数
-        if (0 == serviceSock->serviceInfo->backlog)
-        {
-            RyanW5500Socket *sock = RyanW5500CreateListenClient(serviceSock);
-            if (NULL == sock)
-            {
-                int8_t socket = -1;
-                rt_mq_send(serviceSock->serviceInfo->clientInfoQueueHandle, &socket, sizeof(int8_t));
-            }
-        }
+        // // 增加listen客户端数
+        // if (0 == serviceSock->serviceInfo->backlog)
+        // {
+        //     RyanW5500Socket *sock = RyanW5500CreateListenClient(serviceSock);
+        //     if (NULL == sock)
+        //     {
+        //         int8_t socket = -1;
+        //         rt_mq_send(serviceSock->serviceInfo->clientInfoQueueHandle, &socket, sizeof(int8_t));
+        //     }
+        // }
 
         // 添加服务器套接字监听数
         serviceSock->serviceInfo->backlog++;
@@ -197,9 +203,12 @@ static void RyanW5500ListenSocketDestory(RyanW5500Socket *sock)
 static int RyanW5500SocketDestory(RyanW5500Socket *sock)
 {
 
-    assert(NULL != sock);
+    RT_ASSERT(NULL != sock);
 
-    rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); // 获取互斥锁
+    rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); //
+    if (sock->magic != WIZ_SOCKET_MAGIC)
+        goto next;
+
     if (sock->remoteAddr)
         free(sock->remoteAddr);
 
@@ -237,6 +246,8 @@ static int RyanW5500SocketDestory(RyanW5500Socket *sock)
     setSn_IR(sock->socket, 0xff); // 清空套接字中断
     setSn_IMR(sock->socket, 0);   // 设置套接字ISR状态支持
     memset(sock, 0, sizeof(RyanW5500Socket));
+
+next:
     rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
     return 0;
 }
@@ -256,11 +267,13 @@ RyanW5500Socket *RyanW5500SocketCreate(int type, int port)
 
     rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); // 获取互斥锁
     // 找到一个空的 WIZnet 套接字条目
-    for (idx = 0; idx < RyanW5500MaxSocketNum && RyanW5500Sockets[idx].magic; idx++)
+    for (idx = 0; idx < RyanW5500MaxSocketNum && WIZ_SOCKET_MAGIC == RyanW5500Sockets[idx].magic; idx++)
         ;
 
     // 没有空闲socket
-    RyanW5500CheckCode(RyanW5500MaxSocketNum != idx, EMFILE, { goto err; });
+    RyanW5500CheckCode(RyanW5500MaxSocketNum != idx, EMFILE, rlog_d, {
+                        rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
+                        goto err; });
 
     sock = &(RyanW5500Sockets[idx]);
     sock->magic = WIZ_SOCKET_MAGIC;
@@ -283,14 +296,13 @@ RyanW5500Socket *RyanW5500SocketCreate(int type, int port)
     int8_t result = wizchip_socket(sock->socket, sock->type, sock->port, 0); // wizchip_socket内部会先close一次
     if (result != sock->socket)
     {
-        LOG_E("RyanW5500 socket(%d) create failed!  result: %d", sock->socket, result);
+        rlog_e("RyanW5500 socket(%d) create failed!  result: %d", sock->socket, result);
         goto err;
     }
 
     return sock;
 
 err:
-    rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
     wiz_closesocket(sock->socket);
     return NULL;
 }
@@ -304,9 +316,9 @@ err:
 void RyanListenServiceAddClient(RyanW5500Socket *serviceSock, RyanW5500Socket *clientSock)
 {
 
-    assert(NULL != serviceSock);
-    assert(NULL != clientSock);
-    assert(serviceSock->serviceInfo->backlog > 0);
+    RT_ASSERT(NULL != serviceSock);
+    RT_ASSERT(NULL != clientSock);
+    RT_ASSERT(serviceSock->serviceInfo->backlog > 0);
 
     int8_t socket = -1;
 
@@ -318,6 +330,7 @@ void RyanListenServiceAddClient(RyanW5500Socket *serviceSock, RyanW5500Socket *c
 
     if (serviceSock->serviceInfo->backlog > 0)
     {
+        rlog_w("listen回调连接");
         RyanW5500Socket *sock = RyanW5500CreateListenClient(serviceSock);
         if (NULL == sock)
         {
@@ -342,9 +355,9 @@ int wiz_socket(int domain, int type, int protocol)
     RyanW5500Socket *sock = NULL;
 
     // 该实现不支持指定的协议族类型。
-    RyanW5500CheckCode(AF_INET == domain || AF_WIZ == domain, EAFNOSUPPORT, { return -1; });
+    RyanW5500CheckCode(AF_INET == domain || AF_WIZ == domain, EAFNOSUPPORT, rlog_d, { return -1; });
     // 不支持特定的运输层协议
-    // RyanW5500CheckCode(0 == protocol, EPROTONOSUPPORT, { return -1; });
+    // RyanW5500CheckCode(0 == protocol, EPROTONOSUPPORT, rlog_d,  { return -1; });
 
     switch (type)
     {
@@ -355,12 +368,12 @@ int wiz_socket(int domain, int type, int protocol)
 
     default:
         // 协议不支持套接字类型
-        RyanW5500CheckCode(NULL, EPROTOTYPE, { return -1; });
+        RyanW5500CheckCode(NULL, EPROTOTYPE, rlog_d, { return -1; });
     }
 
     // 分配并初始化一个新的 WIZnet 套接字
     sock = RyanW5500SocketCreate(type, wiz_port);
-    RyanW5500CheckCode(NULL != sock, EMFILE, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EMFILE, rlog_d, { return -1; });
 
     sock->state = RyanW5500SocketInit;
     wiz_port++;
@@ -384,10 +397,10 @@ int wiz_bind(int socket, const struct sockaddr *name, socklen_t namelen)
     RyanW5500Socket *sock = NULL;
     uint16_t port = 0;
 
-    RyanW5500CheckCode(NULL != name && 0 != namelen, EAFNOSUPPORT, { return -1; }); // 非法地址
+    RyanW5500CheckCode(NULL != name && 0 != namelen, EAFNOSUPPORT, rlog_d, { return -1; }); // 非法地址
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
     // PRASE IP 地址和端口
     const struct sockaddr_in *sin = (const struct sockaddr_in *)name;
@@ -399,7 +412,7 @@ int wiz_bind(int socket, const struct sockaddr *name, socklen_t namelen)
     sock->port = port;
     // wizchip_socket内部会先close一次
     int8_t result = wizchip_socket(sock->socket, sock->type, sock->port, 0);
-    RyanW5500CheckCode(result == sock->socket, EMFILE, { return -1; });
+    RyanW5500CheckCode(result == sock->socket, EMFILE, rlog_d, { return -1; });
 
     sock->state = RyanW5500SocketInit;
 
@@ -417,13 +430,13 @@ int wiz_bind(int socket, const struct sockaddr *name, socklen_t namelen)
 int wiz_connect(int socket, const struct sockaddr *name, socklen_t namelen)
 {
     RyanW5500LinkCheck(-1);
-    RyanW5500CheckCode(NULL != name && 0 != namelen, EAFNOSUPPORT, { return -1; }); // 非法地址
+    RyanW5500CheckCode(NULL != name && 0 != namelen, EAFNOSUPPORT, rlog_d, { return -1; }); // 非法地址
 
     RyanW5500Socket *sock = NULL;
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
-    RyanW5500CheckCode(RyanW5500SocketInit == sock->state, EADDRINUSE, { return -1; }); // 尝试建立 已在使用的 / 未初始化 socket的连接。
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
+    RyanW5500CheckCode(RyanW5500SocketInit == sock->state, EADDRINUSE, rlog_d, { return -1; }); // 尝试建立 已在使用的 / 未初始化 socket的连接。
 
     switch (getSn_SR(socket))
     {
@@ -432,7 +445,7 @@ int wiz_connect(int socket, const struct sockaddr *name, socklen_t namelen)
         if (NULL == sock->remoteAddr)
         {
             sock->remoteAddr = (struct sockaddr *)malloc(sizeof(struct sockaddr));
-            RyanW5500CheckCode(NULL != sock->remoteAddr, ENOMEM, { return -1; });
+            RyanW5500CheckCode(NULL != sock->remoteAddr, ENOMEM, rlog_d, { return -1; });
             memset(sock->remoteAddr, 0, sizeof(struct sockaddr));
         }
 
@@ -452,8 +465,8 @@ int wiz_connect(int socket, const struct sockaddr *name, socklen_t namelen)
         int result = wizchip_connect(socket, ipStrArr, htons(sin->sin_port));
         if (SOCK_OK != result)
         {
-            RyanW5500CheckCode(SOCKERR_IPINVALID != result, EAFNOSUPPORT, { return -1; }); // 无效的 IP 地址
-            RyanW5500CheckCode(SOCKERR_TIMEOUT != result, ETIMEDOUT, { return -1; });      // 连接超时
+            RyanW5500CheckCode(SOCKERR_IPINVALID != result, EAFNOSUPPORT, rlog_d, { return -1; }); // 无效的 IP 地址
+            RyanW5500CheckCode(SOCKERR_TIMEOUT != result, ETIMEDOUT, rlog_d, { return -1; });      // 连接超时
             return -1;
         }
     }
@@ -481,13 +494,14 @@ int wiz_listen(int socket, int backlog)
 
     RyanW5500Socket *sock = RyanW5500GetSock(socket);
 
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });                               // 套接字参数不是有效的文件描述符。
-    RyanW5500CheckCode(RyanW5500SocketEstablished != sock->state, EINVAL, { return -1; }); // 套接字已连接
-    RyanW5500CheckCode(Sn_MR_IPRAW != sock->type, EOPNOTSUPP, { return -1; });             // 套接字协议不支持 listen()
-    RyanW5500CheckCode(NULL == sock->serviceInfo, EINVAL, { return -1; });                 // 套接字第一次调用listen
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; }); // 套接字参数不是有效的文件描述符。
+    RyanW5500CheckCode(WIZ_SOCKET_MAGIC == sock->magic, EIO, rlog_d, { return -1; });
+    RyanW5500CheckCode(RyanW5500SocketEstablished != sock->state, EINVAL, rlog_d, { return -1; }); // 套接字已连接
+    RyanW5500CheckCode(Sn_MR_IPRAW != sock->type, EOPNOTSUPP, rlog_d, { return -1; });             // 套接字协议不支持 listen()
+    RyanW5500CheckCode(NULL == sock->serviceInfo, EINVAL, rlog_d, { return -1; });                 // 套接字第一次调用listen
 
     sock->serviceInfo = (RyanW5500ServiceInfo *)malloc(sizeof(RyanW5500ServiceInfo));
-    RyanW5500CheckCode(NULL != sock->serviceInfo, ENOMEM, { goto err; });
+    RyanW5500CheckCode(NULL != sock->serviceInfo, ENOMEM, rlog_d, { goto err; });
     memset(sock->serviceInfo, 0, sizeof(RyanW5500ServiceInfo));
 
     // 创建listen客户端连接消息队列
@@ -497,11 +511,12 @@ int wiz_listen(int socket, int backlog)
 
     // BSD socket允许listen为0，这里消息队列创建1大小，为了appect可以阻塞
     sock->serviceInfo->clientInfoQueueHandle = rt_mq_create(name, sizeof(int8_t), backlog > 0 ? backlog : 1, RT_IPC_FLAG_FIFO);
-    RyanW5500CheckCode(NULL != sock->serviceInfo->clientInfoQueueHandle, ENOMEM, { goto err; });
+    RyanW5500CheckCode(NULL != sock->serviceInfo->clientInfoQueueHandle, ENOMEM, rlog_d, { goto err; });
 
     RyanListInit(&sock->serviceInfo->clientList);
     sock->state = RyanW5500SocketListen;
 
+    rlog_w("listen连接");
     if (NULL == RyanW5500CreateListenClient(sock))
         goto err;
 
@@ -530,13 +545,14 @@ err:
 int wiz_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
 {
     RyanW5500LinkCheck(-1);
-    RyanW5500CheckCode(NULL != addr && 0 != addrlen, EAFNOSUPPORT, { return -1; }); // 非法地址
+    RyanW5500CheckCode(NULL != addr && 0 != addrlen, EAFNOSUPPORT, rlog_d, { return -1; }); // 非法地址
 
     RyanW5500Socket *serviceSock = RyanW5500GetSock(socket);
 
-    RyanW5500CheckCode(NULL != serviceSock, EBADF, { return -1; });                          // 套接字参数不是有效的文件描述符。
-    RyanW5500CheckCode(RyanW5500SocketListen == serviceSock->state, EINVAL, { return -1; }); // 套接字不接受连接，没有listen
-    RyanW5500CheckCode(NULL != serviceSock->serviceInfo, ENOBUFS, { return -1; });           // 没有可用的缓冲区空间,理论上不会出现
+    RyanW5500CheckCode(NULL != serviceSock, EBADF, rlog_d, { return -1; }); // 套接字参数不是有效的文件描述符。
+    RyanW5500CheckCode(WIZ_SOCKET_MAGIC == serviceSock->magic, EIO, rlog_d, { return -1; });
+    RyanW5500CheckCode(RyanW5500SocketListen == serviceSock->state, EINVAL, rlog_d, { return -1; }); // 套接字不接受连接，没有listen
+    RyanW5500CheckCode(NULL != serviceSock->serviceInfo, ENOBUFS, rlog_d, { return -1; });           // 没有可用的缓冲区空间,理论上不会出现
 
     while (1)
     {
@@ -545,14 +561,14 @@ int wiz_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
         if (rt_mq_recv(serviceSock->serviceInfo->clientInfoQueueHandle, (void *)&clientSocket, sizeof(int8_t), RT_WAITING_FOREVER) != RT_EOK)
             continue;
 
-        RyanW5500CheckCode(-1 != clientSocket, EPROTO, { return -1; });
+        RyanW5500CheckCode(-1 != clientSocket, EPROTO, rlog_d, { return -1; });
 
         // 检查连接消息类型
         if (SOCK_ESTABLISHED != getSn_SR(clientSocket))
         {
             // 错误按摩，关闭客户端套接字
             wiz_closesocket(clientSocket);
-            RyanW5500CheckCode(NULL, EPROTO, { return -1; }); // 发生协议错误,客户端套接字不处于连接状态，极端情况才会出现
+            RyanW5500CheckCode(NULL, EPROTO, rlog_d, { return -1; }); // 发生协议错误,客户端套接字不处于连接状态，极端情况才会出现
         }
 
         // 获取新的客户端套接字信息
@@ -566,7 +582,7 @@ int wiz_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
         sin->sin_addr.s_addr = ipStrArrToinAddr(ipStrArr);
 
         *addrlen = sizeof(struct sockaddr);
-        LOG_D("accept remote ip: %s, remote port: %d", inet_ntoa(sin->sin_addr.s_addr), remotePort);
+        rlog_d("accept remote ip: %s, remote port: %d", inet_ntoa(sin->sin_addr.s_addr), remotePort);
 
         return clientSocket;
     }
@@ -586,7 +602,7 @@ int wiz_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
 int wiz_sendto(int socket, const void *data, size_t size, int flags, const struct sockaddr *to, socklen_t tolen)
 {
     RyanW5500LinkCheck(-1);
-    RyanW5500CheckCode(NULL != data && 0 != size, EFAULT, { return -1; });
+    RyanW5500CheckCode(NULL != data && 0 != size, EFAULT, rlog_d, { return -1; });
 
     RyanW5500Socket *sock = NULL;
     uint8_t socketState = 0;
@@ -594,13 +610,14 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
             timeout = 0;
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
+    RyanW5500CheckCode(WIZ_SOCKET_MAGIC == sock->magic, EIO, rlog_d, { return -1; });
 
     timeout = sock->sendTimeout;
     if (timeout <= 0)
         timeout = RT_WAITING_FOREVER;
 
-    // 设置接收超时
+    // 设置发送超时
     platformTimer_t recvTimer = {0};
     platformTimerCutdown(&recvTimer, timeout);
 
@@ -608,23 +625,23 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
     {
     case Sn_MR_TCP:
         socketState = getSn_SR(socket);
-        RyanW5500CheckCode(SOCK_ESTABLISHED == socketState, EDESTADDRREQ, { return -1; }); // 套接字不是连接模式，没有设置其对等地址，也没有指定目标地址。
+        RyanW5500CheckCode(SOCK_ESTABLISHED == socketState, EDESTADDRREQ, rlog_d, { return -1; }); // 套接字不是连接模式，没有设置其对等地址，也没有指定目标地址。
 
         // 如果发送数据比剩余缓冲区大，则分片发送，否则缓冲区数据会被清空
         sendLen = getSn_TX_FSR(sock->socket);
-        RyanW5500CheckCode(sendLen > 0, EWOULDBLOCK, { return -1; }); // 发送缓冲区已满
+        RyanW5500CheckCode(sendLen > 0, EWOULDBLOCK, rlog_d, { return -1; }); // 发送缓冲区已满
 
         if (sendLen > size)
             sendLen = size;
         sendLen = wizchip_send(socket, (uint8_t *)data, sendLen);
-        RyanW5500CheckCode(sendLen > 0, EINTR, { return -1; }); // 发送失败，一般不会，所以将错误设置为信号中断
+        RyanW5500CheckCode(sendLen > 0, EINTR, rlog_d, { return -1; }); // 发送失败，一般不会，所以将错误设置为信号中断
         return sendLen;
 
     case Sn_MR_UDP:
     case Sn_MR_IPRAW:
     {
         socketState = getSn_SR(socket);
-        RyanW5500CheckCode(SOCK_UDP == socketState || SOCK_IPRAW == socketState, EDESTADDRREQ, { return -1; });
+        RyanW5500CheckCode(SOCK_UDP == socketState || SOCK_IPRAW == socketState, EDESTADDRREQ, rlog_d, { return -1; });
 
         struct sockaddr_in *sin = NULL;
 
@@ -636,7 +653,7 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
 
         // 查看是否是广播
         if (sin->sin_addr.s_addr == -1) // inet_addr("255.255.255.255")
-            RyanW5500CheckCode(0 != (sock->soOptionsFlag & SO_BROADCAST), EACCES, { return -1; });
+            RyanW5500CheckCode(0 != (sock->soOptionsFlag & SO_BROADCAST), EACCES, rlog_d, { return -1; });
 
         // 将发送ip转换为W5500识别的
         uint8_t ipStrArr[4] = {0};
@@ -644,15 +661,15 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
 
         // 如果发送数据比剩余缓冲区大，则分片发送，否则缓冲区数据会被清空
         sendLen = getSn_TX_FSR(sock->socket);
-        RyanW5500CheckCode(sendLen > 0, EWOULDBLOCK, { return -1; }); // 发送缓冲区已满
+        RyanW5500CheckCode(sendLen > 0, EWOULDBLOCK, rlog_d, { return -1; }); // 发送缓冲区已满
 
         if (sendLen > size)
             sendLen = size;
         sendLen = wizchip_sendto(sock->socket, (uint8_t *)data, sendLen, ipStrArr, htons(sin->sin_port));
         if (sendLen <= 0)
         {
-            RyanW5500CheckCode(SOCKERR_SOCKCLOSED == sendLen, EPIPE, { return -1; }); // 套接字被关闭
-            LOG_E("udp send fail, result: %d", sendLen);
+            RyanW5500CheckCode(SOCKERR_SOCKCLOSED == sendLen, EPIPE, rlog_d, { return -1; }); // 套接字被关闭
+            rlog_e("udp send fail, result: %d", sendLen);
             return -1;
         }
 
@@ -660,7 +677,7 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
     }
 
     default:
-        LOG_E("socket (%d) type %d is not support.", socket, sock->type);
+        rlog_e("socket (%d) type %d is not support.", socket, sock->type);
         return -1;
     }
 }
@@ -679,7 +696,7 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
 int wiz_recvfrom(int socket, void *mem, size_t len, int flags, struct sockaddr *from, socklen_t *fromlen)
 {
     RyanW5500LinkCheck(-1);
-    RyanW5500CheckCode(NULL != mem && 0 != len, EFAULT, { return -1; });
+    RyanW5500CheckCode(NULL != mem && 0 != len, EFAULT, rlog_d, { return -1; });
 
     RyanW5500Socket *sock = NULL;
     uint8_t socketState = 0;
@@ -689,7 +706,8 @@ int wiz_recvfrom(int socket, void *mem, size_t len, int flags, struct sockaddr *
     platformTimer_t recvTimer = {0};
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
+    RyanW5500CheckCode(WIZ_SOCKET_MAGIC == sock->magic, EIO, rlog_d, { return -1; });
 
     // 设置 WIZNnet 套接字接收超时
     timeout = sock->recvTimeout;
@@ -700,20 +718,20 @@ int wiz_recvfrom(int socket, void *mem, size_t len, int flags, struct sockaddr *
 
 again:
     // 判断是否超时
-    RyanW5500CheckCode(0 != platformTimerRemain(&recvTimer), EAGAIN, { return -1; });
+    RyanW5500CheckCode(0 != platformTimerRemain(&recvTimer), EAGAIN, rlog_d, { return -1; });
 
     switch (sock->type)
     {
     case Sn_MR_TCP:
     {
         socketState = getSn_SR(socket);
-        RyanW5500CheckCode(SOCK_ESTABLISHED == socketState, ENOTCONN, { return -1; }); // 在未连接的连接模式套接字上尝试接收。
+        RyanW5500CheckCode(SOCK_ESTABLISHED == socketState, ENOTCONN, rlog_d, { return -1; }); // 在未连接的连接模式套接字上尝试接收。
 
         result = rt_event_recv(RyanW5500Entry.W5500EventHandle, (1 << sock->socket),
                                RT_EVENT_FLAG_AND | RT_EVENT_FLAG_CLEAR,
                                timeout, NULL);
-        RyanW5500CheckCode(RT_EOK == result, EAGAIN, { return -1; });                        // 判断是否超时
-        RyanW5500CheckCode(RyanW5500SocketClose != sock->state, ECONNRESET, { return -1; }); // 连接被对等方关闭。
+        RyanW5500CheckCode(RT_EOK == result, EAGAIN, rlog_d, { return -1; });                        // 判断是否超时
+        RyanW5500CheckCode(RyanW5500SocketClose != sock->state, ECONNRESET, rlog_d, { return -1; }); // 连接被对等方关闭。
 
         // 获取数据寄存器，没有数据就重新接收
         recvLen = getSn_RX_RSR(socket);
@@ -727,7 +745,7 @@ again:
         recvLen = wizchip_recv(socket, mem, recvLen);
         if (recvLen <= 0)
         {
-            LOG_E("recv error, result: %d", recvLen);
+            rlog_e("recv error, result: %d", recvLen);
             return -1;
         }
 
@@ -738,13 +756,13 @@ again:
     case Sn_MR_IPRAW:
     {
         socketState = getSn_SR(socket);
-        RyanW5500CheckCode(SOCK_UDP == socketState || SOCK_IPRAW == socketState, ENOTCONN, { return -1; }); // 在未连接的连接模式套接字上尝试接收。
+        RyanW5500CheckCode(SOCK_UDP == socketState || SOCK_IPRAW == socketState, ENOTCONN, rlog_d, { return -1; }); // 在未连接的连接模式套接字上尝试接收。
 
         result = rt_event_recv(RyanW5500Entry.W5500EventHandle, (1 << sock->socket),
                                RT_EVENT_FLAG_AND | RT_EVENT_FLAG_CLEAR,
                                timeout, NULL);
-        RyanW5500CheckCode(RT_EOK == result, EAGAIN, { return -1; }); // 判断是否超时
-        RyanW5500CheckCode(RyanW5500SocketClose != sock->state, ECONNRESET, { return -1; });
+        RyanW5500CheckCode(RT_EOK == result, EAGAIN, rlog_d, { return -1; }); // 判断是否超时
+        RyanW5500CheckCode(RyanW5500SocketClose != sock->state, ECONNRESET, rlog_d, { return -1; });
 
         // 获取数据寄存器，没有数据就重新接收
         recvLen = getSn_RX_RSR(socket);
@@ -761,7 +779,7 @@ again:
         recvLen = wizchip_recvfrom(socket, mem, recvLen, remoteIp, &remotePort);
         if (recvLen <= 0)
         {
-            LOG_E("recvfrom error, result: %d", recvLen);
+            rlog_e("recvfrom error, result: %d", recvLen);
             return -1;
         }
 
@@ -776,7 +794,7 @@ again:
     }
 
     default:
-        LOG_E("socket (%d) type %d is not support.", socket, sock->type);
+        rlog_e("socket (%d) type %d is not support.", socket, sock->type);
         return -1;
     }
 }
@@ -811,7 +829,7 @@ int wiz_closesocket(int socket)
     RyanW5500Socket *sock = NULL;
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
     if (SOCK_CLOSED == getSn_SR(sock->socket))
     {
@@ -829,7 +847,7 @@ int wiz_closesocket(int socket)
         result = wizchip_close(sock->socket);
         if (SOCK_OK != result)
         {
-            LOG_E("socket(%d) close failed.", sock->socket);
+            rlog_e("socket(%d) close failed.", sock->socket);
             RyanW5500SocketDestory(sock);
             return -1;
         }
@@ -857,11 +875,11 @@ int wiz_shutdown(int socket, int how)
         break;
 
     default:
-        RyanW5500CheckCode(NULL, EINVAL, return -1;)
+        RyanW5500CheckCode(NULL, EINVAL, rlog_d, return -1;)
     }
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
     return wiz_closesocket(sock->socket);
 }
@@ -879,20 +897,20 @@ int wiz_shutdown(int socket, int how)
 int wiz_setsockopt(int socket, int level, int optname, const void *optval, socklen_t optlen)
 {
     RyanW5500LinkCheck(-1);
-    RyanW5500CheckCode(NULL != optval && 0 != optlen, EFAULT, { return -1; });
+    RyanW5500CheckCode(NULL != optval && 0 != optlen, EFAULT, rlog_d, { return -1; });
 
     RyanW5500Socket *sock = NULL;
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; }); // 指定的选项在指定的套接字级别无效或套接字已关闭。
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; }); // 指定的选项在指定的套接字级别无效或套接字已关闭。
 
     if (SOL_SOCKET == level)
     {
         switch (optname)
         {
-        case SO_BROADCAST:                                                       // 配置用于发送广播数据的套接字。此选项仅适用于支持广播 IP 和 UDP 的协议 布尔类型
-            RyanW5500CheckCode(Sn_MR_TCP != sock->type, EINVAL, { return -1; }); // 指定的选项在指定的套接字级别无效或套接字已关闭。
-            RyanW5500CheckCode(sizeof(int) == optlen, EFAULT, { return -1; });
+        case SO_BROADCAST:                                                               // 配置用于发送广播数据的套接字。此选项仅适用于支持广播 IP 和 UDP 的协议 布尔类型
+            RyanW5500CheckCode(Sn_MR_TCP != sock->type, EINVAL, rlog_d, { return -1; }); // 指定的选项在指定的套接字级别无效或套接字已关闭。
+            RyanW5500CheckCode(sizeof(int) == optlen, EFAULT, rlog_d, { return -1; });
             if (1 == *(int *)optval)
                 sock->soOptionsFlag |= optname;
             else
@@ -905,18 +923,18 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
                 break;
             uint32_t keepalive = 2 * 60 * 60 / 5; // w5500 Sn_KPALVTR单位时间为5
             if (1 == *(int *)optval)
-                RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_KEEPALIVEAUTO, (void *)&keepalive), EINVAL, { return -1; });
+                RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_KEEPALIVEAUTO, (void *)&keepalive), EINVAL, rlog_d, { return -1; });
             break;
         }
 
         case SO_RCVTIMEO: // 阻止接收调用的超时（以毫秒为单位）。 此选项的默认值为零，表示接收操作不会超时 类型struct timeval
-            RyanW5500CheckCode(sizeof(struct timeval) == optlen, EFAULT, { return -1; });
+            RyanW5500CheckCode(sizeof(struct timeval) == optlen, EFAULT, rlog_d, { return -1; });
             sock->recvTimeout = ((const struct timeval *)optval)->tv_sec * 1000 +
                                 ((const struct timeval *)optval)->tv_usec / 1000;
             break;
 
         case SO_SNDTIMEO: // 阻止发送调用的超时（以毫秒为单位）。 此选项的默认值为零，表示发送操作不会超时。类型struct timeval
-            RyanW5500CheckCode(sizeof(struct timeval) == optlen, EFAULT, { return -1; });
+            RyanW5500CheckCode(sizeof(struct timeval) == optlen, EFAULT, rlog_d, { return -1; });
             sock->sendTimeout = ((const struct timeval *)optval)->tv_sec * 1000 +
                                 ((const struct timeval *)optval)->tv_usec / 1000;
             break;
@@ -937,7 +955,7 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
             return -1;
 
         default:
-            RyanW5500CheckCode(NULL, ENOPROTOOPT, { return -1; });
+            RyanW5500CheckCode(NULL, ENOPROTOOPT, rlog_d, { return -1; });
         }
     }
     else if (IPPROTO_IP == level)
@@ -945,18 +963,18 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
         switch (optname)
         {
         case IP_TOS: // 本选项是int型的数值选项，允许对TCP、UDP的IP头中的tos字段进行设置
-            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TOS, (void *)optval), EINVAL, { return -1; });
+            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TOS, (void *)optval), EINVAL, rlog_d, { return -1; });
             break;
 
         case IP_TTL: // 本选项是int型的数值选项，允许对单播报文的TTL默认值进行设置。
-            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TTL, (void *)optval), EINVAL, { return -1; });
+            RyanW5500CheckCode(SOCK_OK == wizchip_setsockopt(sock->socket, SO_TTL, (void *)optval), EINVAL, rlog_d, { return -1; });
             break;
 
         // UDP 多播的选项和类型
         case IP_ADD_MEMBERSHIP: // 加入一个组播组 struct ip_mreq
         {
-            RyanW5500CheckCode(Sn_MR_TCP != sock->type, EINVAL, { return -1; }); // 指定的选项在指定的套接字级别无效或套接字已关闭。
-            RyanW5500CheckCode(sizeof(struct ip_mreq) == optlen, EFAULT, { return -1; });
+            RyanW5500CheckCode(Sn_MR_TCP != sock->type, EINVAL, rlog_d, { return -1; }); // 指定的选项在指定的套接字级别无效或套接字已关闭。
+            RyanW5500CheckCode(sizeof(struct ip_mreq) == optlen, EFAULT, rlog_d, { return -1; });
             struct ip_mreq *mreq = (struct ip_mreq *)optval;
 
             // 需要在Sn_CR命令之前，分开配置组播 IP 地址及端口号。
@@ -974,14 +992,14 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
             setSn_DPORT(sock->socket, sock->port);
 
             int8_t result = wizchip_socket(sock->socket, sock->type, sock->port, Sn_MR_MULTI);
-            RyanW5500CheckCode(result == sock->socket, EMFILE, { return -1; });
+            RyanW5500CheckCode(result == sock->socket, EMFILE, rlog_d, { return -1; });
             break;
         }
 
         case IP_DROP_MEMBERSHIP: // 退出组播组 struct ip_mreq
         {
             int8_t result = wizchip_socket(sock->socket, sock->type, sock->port, 0);
-            RyanW5500CheckCode(result == sock->socket, EMFILE, { return -1; });
+            RyanW5500CheckCode(result == sock->socket, EMFILE, rlog_d, { return -1; });
             break;
         }
 
@@ -993,7 +1011,7 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
             // case IP_RECVIF:          // 本选项是标志位，置上之后，允许对UDP socket调用recvfrom的时候，能够以辅助数据的形式获取到客户端报文的目的接口。
 
         default:
-            RyanW5500CheckCode(NULL, ENOPROTOOPT, { return -1; });
+            RyanW5500CheckCode(NULL, ENOPROTOOPT, rlog_d, { return -1; });
         }
     }
     else if (IPPROTO_TCP == level)
@@ -1006,11 +1024,11 @@ int wiz_setsockopt(int socket, int level, int optname, const void *optval, sockl
         case TCP_KEEPCNT:   // 获取或设置将在连接终止之前发送的 TCP 保持活动探测数。 将TCP_KEEPCNT设置为大于 255 的值是非法的。
             return -1;
         default:
-            RyanW5500CheckCode(NULL, ENOPROTOOPT, { return -1; });
+            RyanW5500CheckCode(NULL, ENOPROTOOPT, rlog_d, { return -1; });
         }
     }
     else
-        RyanW5500CheckCode(NULL, EINVAL, { return -1; });
+        RyanW5500CheckCode(NULL, EINVAL, rlog_d, { return -1; });
 
     return 0;
 }
@@ -1031,19 +1049,19 @@ int wiz_getsockopt(int socket, int level, int optname, void *optval, socklen_t *
 {
 
     RyanW5500LinkCheck(-1);
-    RyanW5500CheckCode(NULL != optval && NULL != optlen, EFAULT, { return -1; });
+    RyanW5500CheckCode(NULL != optval && NULL != optlen, EFAULT, rlog_d, { return -1; });
 
     RyanW5500Socket *sock = NULL;
 
     sock = RyanW5500GetSock(socket);
-    RyanW5500CheckCode(NULL != sock, EBADF, { return -1; });
+    RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
     if (SOL_SOCKET == level)
     {
         switch (optname)
         {
         case SO_BROADCAST: // 报告是否支持广播消息的传输 布尔类型
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             *(int *)optval = Sn_MR_TCP != sock->type ? 1 : 0;
             *optlen = sizeof(int);
             break;
@@ -1053,33 +1071,33 @@ int wiz_getsockopt(int socket, int level, int optname, void *optval, socklen_t *
             return -1;
 
         case SO_RCVTIMEO: // 报告阻止接收调用的超时。 类型struct timeval
-            RyanW5500CheckCode(sizeof(struct timeval) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(struct timeval) <= *optlen, EINVAL, rlog_d, { return -1; });
             ((struct timeval *)(optval))->tv_sec = sock->recvTimeout / 1000U;
             ((struct timeval *)(optval))->tv_usec = (sock->recvTimeout % 1000U) * 1000U;
             *optlen = sizeof(struct timeval);
             break;
 
         case SO_SNDTIMEO: // 报告阻止发送调用的超时。 此选项的默认值为零，表示发送操作不会超时。类型struct timeval
-            RyanW5500CheckCode(sizeof(struct timeval) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(struct timeval) <= *optlen, EINVAL, rlog_d, { return -1; });
             ((struct timeval *)optval)->tv_sec = sock->sendTimeout / 1000U;
             ((struct timeval *)optval)->tv_usec = (sock->sendTimeout % 1000U) * 1000U;
             *optlen = sizeof(struct timeval);
             break;
 
         case SO_SNDBUF: // 报告发送缓冲区大小。此选项采用 int 值。
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             wizchip_getsockopt(socket, (sockopt_type)SO_SENDBUF, (void *)optval);
             *optlen = sizeof(int);
             break;
 
         case SO_RCVBUF: // 报告接收缓冲区大小。此选项采用 int 值。
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             wizchip_getsockopt(socket, (sockopt_type)SO_RECVBUF, (void *)optval);
             *optlen = sizeof(int);
             break;
 
         case SO_ACCEPTCONN: // 报告是否启用套接字侦听 布尔类型
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             if (RyanW5500SocketListen == sock->state && NULL != sock->serviceInfo)
                 *(int *)optval = 1;
             else
@@ -1088,14 +1106,14 @@ int wiz_getsockopt(int socket, int level, int optname, void *optval, socklen_t *
             break;
 
         case SO_ERROR: // 报告有关错误状态的信息并将其清除。 int
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             *(int *)optval = errno;
             *optlen = sizeof(int);
             errno = 0;
             break;
 
         case SO_TYPE: // 报告套接字类型   int
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             *(int *)optval = sock->type;
             *optlen = sizeof(int);
             break;
@@ -1110,7 +1128,7 @@ int wiz_getsockopt(int socket, int level, int optname, void *optval, socklen_t *
             return -1;
 
         default:
-            RyanW5500CheckCode(NULL, ENOPROTOOPT, { return -1; });
+            RyanW5500CheckCode(NULL, ENOPROTOOPT, rlog_d, { return -1; });
         }
     }
     else if (IPPROTO_IP == level)
@@ -1118,13 +1136,13 @@ int wiz_getsockopt(int socket, int level, int optname, void *optval, socklen_t *
         switch (optname)
         {
         case IP_TOS: // 本选项是int型的数值选项，允许对TCP、UDP的IP头中的tos字段进行获取
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             wizchip_getsockopt(sock->socket, (sockopt_type)SO_TOS, optval);
             *optlen = sizeof(int);
             break;
 
         case IP_TTL: // 本选项是int型的数值选项，允许对单播报文的TTL默认值进行获取
-            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, { return -1; });
+            RyanW5500CheckCode(sizeof(int) <= *optlen, EINVAL, rlog_d, { return -1; });
             wizchip_getsockopt(sock->socket, (sockopt_type)SO_TTL, optval);
             *optlen = sizeof(int);
             break;
@@ -1139,7 +1157,7 @@ int wiz_getsockopt(int socket, int level, int optname, void *optval, socklen_t *
             //     return -1;
 
         default:
-            RyanW5500CheckCode(NULL, ENOPROTOOPT, { return -1; });
+            RyanW5500CheckCode(NULL, ENOPROTOOPT, rlog_d, { return -1; });
         }
     }
     else if (IPPROTO_TCP == level)
@@ -1152,11 +1170,11 @@ int wiz_getsockopt(int socket, int level, int optname, void *optval, socklen_t *
         case TCP_KEEPCNT:   // 获取或设置将在连接终止之前发送的 TCP 保持活动探测数。 将TCP_KEEPCNT设置为大于 255 的值是非法的。
             return -1;
         default:
-            RyanW5500CheckCode(NULL, ENOPROTOOPT, { return -1; });
+            RyanW5500CheckCode(NULL, ENOPROTOOPT, rlog_d, { return -1; });
         }
     }
     else
-        RyanW5500CheckCode(NULL, EINVAL, { return -1; });
+        RyanW5500CheckCode(NULL, EINVAL, rlog_d, { return -1; });
 
     return 0;
 
@@ -1184,20 +1202,20 @@ int RyanW5500_gethostbyname(const char *name, ip_addr_t *addr)
         uint8_t remote_ip[4] = {0};
         uint8_t data_buffer[512];
 
-        ulog_w("TAG", "%s:%d 开始获取dns", __FILE__, __LINE__);
+        rlog_w("开始获取dns");
         // DNS客户端处理
         ret = DNS_run(gWIZNETINFO.dns, (uint8_t *)name, remote_ip, data_buffer);
         if (1 != ret)
         {
             if (-1 == ret)
             {
-                LOG_E("MAX_DOMAIN_NAME is too small, should be redefined it.");
+                rlog_e("MAX_DOMAIN_NAME is too small, should be redefined it.");
                 return -1;
             }
 
             if (-2 == ret)
             {
-                LOG_E("DNS failed, socket number is full.");
+                rlog_e("DNS failed, socket number is full.");
                 return -2;
             }
             return -1;
@@ -1237,7 +1255,7 @@ struct hostent *wiz_gethostbyname(const char *name)
 
     if (NULL == name)
     {
-        LOG_E("gethostbyname input name err!");
+        rlog_e("gethostbyname input name err!");
         return NULL;
     }
 

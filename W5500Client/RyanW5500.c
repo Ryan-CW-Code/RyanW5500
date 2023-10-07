@@ -1,8 +1,7 @@
-#define DBG_ENABLE
-
-#define DBG_SECTION_NAME ("w5500")
-#define DBG_LEVEL LOG_LVL_INFO
-#define DBG_COLOR
+#define rlogEnable 1               // 是否使能日志
+#define rlogColorEnable 1          // 是否使能日志颜色
+#define rlogLevel (rlogLvlWarning) // 日志打印等级
+#define rlogTag "W5500"            // 日志tag
 
 #include "RyanW5500Store.h"
 
@@ -13,7 +12,6 @@
  */
 void RyanW5500IRQCallback(void *argument)
 {
-    LOG_D("中断");
     rt_event_send(RyanW5500Entry.W5500EventHandle, RyanW5500IRQBit);
 }
 
@@ -74,14 +72,14 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
     {
         if (getDHCPRemainLeaseTime() < 10 * 1000) // 如果租期只剩余10秒，重新获取ip
         {
-            LOG_I("dhcp租期接近超时, 重新获取ip");
+            rlog_i("dhcp租期接近超时, 重新获取ip");
             MaintainFlag = 0;
             goto next;
         }
 
         if (getDHCPRemainLeaseTime() < (getDHCPLeaseTime() / 2)) // 超过一半就开始续租
         {
-            LOG_I("dhcp续租");
+            rlog_i("dhcp续租");
             MaintainFlag = 1;
             goto next;
         }
@@ -94,7 +92,7 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
 
     if (PHY_LINK_ON == linkState) // w5500处于link状态，更新信息后就退出
     {
-        LOG_D("link State: %d\r\n", linkState);
+        rlog_d("link State: %d\r\n", linkState);
         RyanW5500NetDevInfoUpdate(netdev);
         return 0;
     }
@@ -152,6 +150,9 @@ static void wizIntDataTask(void *parameter)
     // 检查w5500连接是否正常
     while (1)
     {
+
+        RyanW5500Reset(); // 重启w5500
+
         // 超时中断触发为retry_cnt * time_100us * 100us
         struct wiz_NetTimeout_t net_timeout = {
             .retry_cnt = 5,      // 重试次数
@@ -164,9 +165,11 @@ static void wizIntDataTask(void *parameter)
         if (5 == net_timeout.retry_cnt && 2000 == net_timeout.time_100us)
             break;
 
-        LOG_E("Wiznet chip not detected");
-        delay(1000);
+        rlog_e("没有监测到w5500");
+
+        delay(2000);
     }
+    netdev_low_level_set_status(netdev, RT_TRUE); // 设置网络接口设备状态
 
     platformTimerCutdown(&netWorkTimer, 0);
 
@@ -177,7 +180,7 @@ static void wizIntDataTask(void *parameter)
         {
             if (-1 == RyanW5500NetWorkInit(netdev))
             {
-                LOG_D("网络没有连接");
+                rlog_d("网络没有连接");
                 delay(1000);
                 continue;
             }
@@ -186,7 +189,7 @@ static void wizIntDataTask(void *parameter)
         }
 
         rt_event_recv(RyanW5500Entry.W5500EventHandle, RyanW5500IRQBit,
-                      RT_EVENT_FLAG_AND | RT_EVENT_FLAG_CLEAR,
+                      RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
                       1000, NULL);
 
         while (1)
@@ -207,7 +210,7 @@ static void wizIntDataTask(void *parameter)
                     continue;
 
                 // setSIR(socket); // 清除当前socket中断  setSn_IR时w5500内部会自动清除
-                // Sn_IR_SENDOK Sn_IR_TIMEOUT wiz官方库有使用，这里不使用
+                // Sn_IR_SENDOK和Sn_IR_TIMEOUT wiz官方库有使用，这里不使用
                 sn_ir = 0;
                 sn_ir = getSn_IR(socket);         // 获取中断类型消息
                 setSn_IR(socket, RyanW5500SnIMR); // 清除中断类型消息
@@ -215,18 +218,18 @@ static void wizIntDataTask(void *parameter)
                 if (sn_ir & Sn_IR_RECV) // 接收到了对方数据
                 {
                     RyanW5500RecvDataCallback(socket);
-                    LOG_D("接收到数据");
+                    rlog_d("接收到数据");
                 }
 
                 if (sn_ir & Sn_IR_DISCON) // 当接收到对方的 FIN or FIN/ACK 包时
                 {
                     RyanW5500CloseCallback(socket);
-                    LOG_D("断开连接");
+                    rlog_d("断开连接");
                 }
 
                 if (sn_ir & Sn_IR_CON) // 成功与对方建立连接
                 {
-                    LOG_D("连接成功");
+                    rlog_d("连接成功");
                     RyanW5500Socket *clientSock = RyanW5500GetSock(socket);
                     if (-1 == clientSock->serviceSocket)
                         continue;
@@ -260,14 +263,12 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
     reg_wizchip_spi_cbfunc(RyanW5500ReadByte, RyanW5500WriteByte);          // 注册读写函数
     reg_wizchip_spiburst_cbfunc(RyanW5500ReadBurst, RyanW5500WriteBurst);   // 注册多个字节读写
 
-    RyanW5500Reset(); // 重启w5500
-
     RyanW5500Entry.socketMutexHandle = rt_mutex_create("RyanW5500SocketMutex", RT_IPC_FLAG_FIFO);
     RyanW5500Entry.W5500EventHandle = rt_event_create("RyanW5500Event", RT_IPC_FLAG_PRIO);
     RyanW5500AttachIRQ(RyanW5500IRQCallback); // 绑定w5500中断回调函数
 
     netdev = RyanW5500NetdevRegister("RyanW5500"); // W5500
-    netdev_low_level_set_status(netdev, RT_TRUE);  // 设置网络接口设备状态
+    netdev_low_level_set_status(netdev, RT_FALSE); // 设置网络接口设备状态
 
     RyanW5500Entry.w5500TaskHandle = rt_thread_create("RyanW5500",    // 线程name
                                                       wizIntDataTask, // 线程入口函数

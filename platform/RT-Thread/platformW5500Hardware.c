@@ -2,11 +2,11 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <board.h>
 #include <rtthread.h>
 #include <rtdevice.h>
-#include <rtdbg.h>
+#include <board.h>
 #include "drv_spi.h"
+#include "RyanW5500Log.h"
 
 static struct rt_spi_device *RyanW5500SpiDevice = NULL;
 #define RyanW5500SpiFreqMax (40 * 1000 * 1000)
@@ -20,7 +20,7 @@ int RyanW5500SpiInit()
     RyanW5500SpiDevice = (void *)rt_device_find(RYANW5500_SPI_DEVICE);
     if (RyanW5500SpiDevice == NULL)
     {
-        LOG_E("You should attach [%s] into SPI bus firstly.", RYANW5500_SPI_DEVICE);
+        rlog_e("You should attach [%s] into SPI bus firstly.", RYANW5500_SPI_DEVICE);
         return RT_ERROR;
     }
 
@@ -33,7 +33,7 @@ int RyanW5500SpiInit()
 
     if (rt_device_open((rt_device_t)RyanW5500SpiDevice, RT_DEVICE_OFLAG_RDWR) != RT_EOK)
     {
-        LOG_E("open WIZnet SPI device %s error.", RYANW5500_SPI_DEVICE);
+        rlog_e("open WIZnet SPI device %s error.", RYANW5500_SPI_DEVICE);
         return RT_ERROR;
     }
 
@@ -149,10 +149,10 @@ void RyanW5500Reset(void)
     rt_pin_mode(RYANW5500_RST_PIN, PIN_MODE_OUTPUT); // 设置重启引脚电平
 
     rt_pin_write(RYANW5500_RST_PIN, PIN_LOW);
-    rt_thread_mdelay(2);
+    rt_thread_mdelay(10);
 
     rt_pin_write(RYANW5500_RST_PIN, PIN_HIGH);
-    rt_thread_mdelay(2);
+    rt_thread_mdelay(10);
 }
 
 /**

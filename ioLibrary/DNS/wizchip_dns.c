@@ -1,8 +1,7 @@
-#define DBG_ENABLE
-
-#define DBG_SECTION_NAME ("dns")
-#define DBG_LEVEL DBG_WARNING
-#define DBG_COLOR
+#define rlogEnable 1               // 是否使能日志
+#define rlogColorEnable 1          // 是否使能日志颜色
+#define rlogLevel (rlogLvlWarning) // 日志打印等级
+#define rlogTag "W5500Dns"         // 日志tag
 
 #include "RyanW5500Store.h"
 
@@ -456,11 +455,11 @@ int8_t DNS_run(uint8_t *dns_ip, uint8_t *name, uint8_t *ip_from_dns, uint8_t *bu
     sock = RyanW5500SocketCreate(SOCK_DGRAM, IPPORT_DOMAIN);
     if (NULL == sock)
     {
-        LOG_W("dns socket失败");
+        rlog_w("dns socket失败");
         return -2;
     }
 
-    LOG_D("> DNS Query to DNS Server : %d.%d.%d.%d", dns_ip[0], dns_ip[1], dns_ip[2], dns_ip[3]);
+    rlog_d("> DNS Query to DNS Server : %d.%d.%d.%d", dns_ip[0], dns_ip[1], dns_ip[2], dns_ip[3]);
 
     DNS_SOCKET = sock->socket; // SOCK_DNS
     pDNSMSG = buf;             // User's shared buffer
@@ -478,14 +477,14 @@ int8_t DNS_run(uint8_t *dns_ip, uint8_t *name, uint8_t *ip_from_dns, uint8_t *bu
             if (len > MAX_DNS_BUF_SIZE)
                 len = MAX_DNS_BUF_SIZE;
             len = wizchip_recvfrom(DNS_SOCKET, pDNSMSG, len, ip, &port);
-            LOG_D("> Receive DNS message from %d.%d.%d.%d(%d). len = %d", ip[0], ip[1], ip[2], ip[3], port, len);
+            rlog_d("> Receive DNS message from %d.%d.%d.%d(%d). len = %d", ip[0], ip[1], ip[2], ip[3], port, len);
             ret = parseDNSMSG(&dhp, pDNSMSG, ip_from_dns);
             break;
         }
 
         if (0 == platformTimerRemain(&recvTimer))
         {
-            LOG_D("> DNS Timeout\r\n");
+            rlog_d("> DNS Timeout\r\n");
             wizchip_sendto(DNS_SOCKET, pDNSMSG, len, dns_ip, IPPORT_DOMAIN);
             platformTimerCutdown(&recvTimer, DNS_WAIT_TIME);
             retry_count++;
@@ -493,7 +492,7 @@ int8_t DNS_run(uint8_t *dns_ip, uint8_t *name, uint8_t *ip_from_dns, uint8_t *bu
 
         if (retry_count >= MAX_DNS_RETRY)
         {
-            LOG_D("> DNS Server is not responding : %d.%d.%d.%d", dns_ip[0], dns_ip[1], dns_ip[2], dns_ip[3]);
+            rlog_d("> DNS Server is not responding : %d.%d.%d.%d", dns_ip[0], dns_ip[1], dns_ip[2], dns_ip[3]);
             wizchip_close(DNS_SOCKET);
             return 0; // timeout occurred
         }
