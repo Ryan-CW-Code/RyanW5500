@@ -10,6 +10,13 @@ extern "C"
 {
 #endif
 
+    typedef enum
+    {
+        WIZ_EVENT_SEND = 0,
+        WIZ_EVENT_RECV,
+        WIZ_EVENT_ERROR,
+    } RyanW5500Event_e;
+
     // 定义枚举类型
     typedef enum
     {
@@ -28,9 +35,14 @@ extern "C"
 
     typedef struct
     {
-        uint8_t type;                      // WIZnet 套接字的类型（TCP、UDP 或 RAW）
-        uint8_t soOptionsFlag;             // so_options标志位
-        int8_t serviceSocket;              // 当前套接字是listen套接字客户端时，存储listen服务套接字
+        uint8_t type;          // WIZnet 套接字的类型（TCP、UDP 或 RAW）
+        uint8_t soOptionsFlag; // so_options标志位
+        int8_t serviceSocket;  // 当前套接字是listen套接字客户端时，存储listen服务套接字
+
+        uint16_t rcvevent;  // 接收数据次数
+        uint16_t sendevent; // 发送确认数据次数
+        uint16_t errevent;  // 套接字发生错误
+
         uint16_t port;                     // 当前socket端口
         int socket;                        // w5500 真实socket套接字
         uint32_t magic;                    //
@@ -39,6 +51,10 @@ extern "C"
         RyanW5500SocketState_e state;      // RyanW5500 套接字的当前状态
         struct sockaddr *remoteAddr;       // 远程地址
         RyanW5500ServiceInfo *serviceInfo; // 服务器套接字信息
+
+#ifdef SAL_USING_POSIX
+        rt_wqueue_t wait_head;
+#endif
 
     } RyanW5500Socket;
 
@@ -73,6 +89,8 @@ extern "C"
     extern void RyanListenServiceAddClient(RyanW5500Socket *serviceSock, RyanW5500Socket *clientSock);
     extern int RyanW5500RecvDataCallback(int socket);
     extern int RyanW5500CloseCallback(int socket);
+
+    extern void RyanW5500DoEventChanges(RyanW5500Socket *sock, RyanW5500Event_e event, rt_bool_t is_plus);
 
 #ifdef __cplusplus
 }

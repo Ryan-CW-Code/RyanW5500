@@ -17,6 +17,8 @@ extern "C"
 #include <sys/time.h>
 
 #include <rtthread.h>
+#include <rthw.h>
+#include <rtdevice.h>
 
 #include <sal_socket.h>
 #include <sal_netdb.h>
@@ -24,6 +26,10 @@ extern "C"
 #include <sal_low_lvl.h>
 #else
 #include <sal.h>
+#endif
+
+#ifdef SAL_USING_POSIX
+#include <poll.h>
 #endif
 
 #include "netdev_ipaddr.h"

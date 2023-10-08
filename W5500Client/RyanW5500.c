@@ -195,10 +195,9 @@ static void wizIntDataTask(void *parameter)
         while (1)
         {
             intr = 0;
-            ctlwizchip(CW_GET_INTERRUPT, (void *)&intr);
+            ctlwizchip(CW_GET_INTERRUPT, (void *)&intr); // 获取中断状态
             ir = (uint8_t)intr;
             sir = (uint8_t)(intr >> 8);
-
             setIR(ir); // 没有使用IR中断，保险起见进行清空
 
             if (0 == sir) // 所有socket都没有中断就退出循环

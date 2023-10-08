@@ -118,7 +118,7 @@ static int RyanW5500NetdevPing(struct netdev *netdev, const char *host, size_t d
  */
 static void RyanW5500NetdevNetstat(struct netdev *netdev)
 {
-    return ;
+    return;
 }
 
 // netdev设备操作
@@ -134,6 +134,43 @@ const struct netdev_ops wiz_netdev_ops =
         .netstat = RyanW5500NetdevNetstat,
 #endif
 };
+
+#ifdef SAL_USING_POSIX
+static int wiz_poll(struct dfs_fd *file, struct rt_pollreq *req)
+{
+    int mask = 0;
+    RyanW5500Socket *sock;
+    struct sal_socket *sal_sock;
+
+    sal_sock = sal_get_socket((int)file->data);
+    if (!sal_sock)
+    {
+        return -1;
+    }
+
+    sock = RyanW5500GetSock((int)sal_sock->user_data);
+    if (sock != NULL)
+    {
+        rt_base_t level;
+
+        rt_poll_add(&sock->wait_head, req);
+
+        level = rt_hw_interrupt_disable();
+        if (sock->rcvevent)
+            mask |= POLLIN;
+
+        if (sock->sendevent)
+            mask |= POLLOUT;
+
+        if (sock->errevent)
+            mask |= POLLERR;
+
+        rt_hw_interrupt_enable(level);
+    }
+
+    return mask;
+}
+#endif
 
 /**
  * @brief socket操作
@@ -155,9 +192,9 @@ static struct sal_socket_ops RyanW5500SocketOps =
         .getpeername = NULL,
         .getsockname = NULL,
         .ioctlsocket = NULL,
-        // #ifdef SAL_USING_POSIX
-        //         wiz_poll,
-        // #endif /* SAL_USING_POSIX */
+#ifdef SAL_USING_POSIX
+        .poll = wiz_poll,
+#endif
 };
 
 /**
