@@ -50,7 +50,6 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
         for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
             wiz_closesocket(socket);
 
-        gWIZNETINFO.dhcp = netdev_is_dhcp_enabled(netdev) ? NETINFO_DHCP : NETINFO_STATIC;
         goto next;
     }
 
@@ -61,9 +60,7 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
         for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
             wiz_closesocket(socket);
 
-        gWIZNETINFO.dhcp = netdev_is_dhcp_enabled(netdev) ? NETINFO_DHCP : NETINFO_STATIC;
         MaintainFlag = 0;
-
         goto next;
     }
 
@@ -98,6 +95,7 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
     }
 
 next:
+    gWIZNETINFO.dhcp = netdev_is_dhcp_enabled(netdev) ? NETINFO_DHCP : NETINFO_STATIC;
     if (NETINFO_DHCP == gWIZNETINFO.dhcp)
     {
         if (0 == MaintainFlag)
@@ -271,7 +269,7 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
     RyanW5500Entry.w5500TaskHandle = rt_thread_create("RyanW5500",    // 线程name
                                                       wizIntDataTask, // 线程入口函数
                                                       (void *)netdev, // 线程入口函数参数
-                                                      1024,           // 线程栈大小
+                                                      1536,           // 线程栈大小
                                                       8,              // 线程优先级
                                                       5);             // 线程时间片
 

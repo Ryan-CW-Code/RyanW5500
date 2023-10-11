@@ -113,14 +113,14 @@ RyanW5500Socket *RyanW5500GetSock(int socket)
 {
     if (socket < 0 || socket >= RyanW5500MaxSocketNum)
     {
-        rlog_w("socket 越界");
+        rlog_d("socket 越界");
         return NULL;
     }
 
     // 检查套接字结构是否有效
     if (RyanW5500Sockets[socket].magic != WIZ_SOCKET_MAGIC)
     {
-        rlog_w("套接字结构无效");
+        rlog_d("套接字结构无效");
         return NULL;
     }
 

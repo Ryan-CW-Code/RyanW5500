@@ -21,16 +21,15 @@
 #include "RyanW5500Log.h"
 
 #ifdef PKG_USING_RYANW5500_EXAMPLE
-static const char *TAG = "RyanW5500Test";
 
 static struct netdev *RyanNetdev = NULL;
 
-void neDevStatusChangeCallback(struct netdev *netdev, enum netdev_cb_type type)
+static void neDevStatusChangeCallback(struct netdev *netdev, enum netdev_cb_type type)
 {
-    rlog_i("w5500 nedev state: %d", type);
+    rlog_i("w5500 nedev state: %d, threadName: %s", type, rt_thread_self()->name);
 }
 
-int w5500Start(int argc, char *argv[])
+static int w5500Start(int argc, char *argv[])
 {
 
     if (NULL != RyanNetdev)
@@ -106,7 +105,7 @@ int w5500Start(int argc, char *argv[])
 }
 
 // TCP并发ECHO服务器
-void deal_client_fun(void *argument)
+static void deal_client_fun(void *argument)
 {
 
     int fd = *(int *)argument; // 通过arg获得已连接套接字
@@ -142,7 +141,7 @@ void deal_client_fun(void *argument)
     }
 }
 
-void tcpEchoTask(void *argument)
+static void tcpEchoTask(void *argument)
 {
     int32_t port = (int32_t)argument;
 
@@ -185,7 +184,7 @@ void tcpEchoTask(void *argument)
     }
 }
 
-void udpEchoServiceTask(void *argument)
+static void udpEchoServiceTask(void *argument)
 {
     int32_t port = (int32_t)argument;
 
@@ -237,7 +236,7 @@ void udpEchoServiceTask(void *argument)
     closesocket(sockfd);
 }
 
-void multicastEchoServiceTask(void *argument)
+static void multicastEchoServiceTask(void *argument)
 {
     int32_t port = (int32_t)argument;
 
@@ -307,7 +306,7 @@ static int w5500Static(int argc, char *argv[])
     netdev_dhcp_enabled(RyanNetdev, RT_FALSE);
 
     //  设置网卡 IP 地址
-    uint32_t addr = inet_addr("192.168.3.69");
+    uint32_t addr = inet_addr("192.168.8.69");
     netdev_set_ipaddr(RyanNetdev, (const ip_addr_t *)&addr);
 
     addr = inet_addr("192.168.1.1");
@@ -723,7 +722,7 @@ static int w5500GetAddrInfo(int argc, char *argv[])
  * @brief mqtt msh命令
  *
  */
-struct RyanMqttCmdDes
+struct RyanW5500CmdDes
 {
     const char *cmd;
     const char *explain;
@@ -732,7 +731,7 @@ struct RyanMqttCmdDes
 
 static int w5500Help(int argc, char *argv[]);
 
-static struct RyanMqttCmdDes cmdTab[] = {
+static struct RyanW5500CmdDes cmdTab[] = {
     {"help", "打印帮助信息", w5500Help},
     {"start", "启动RyanW5500", w5500Start},
     {"static", "netdev设置w5500静态地址,如果触发了ip变化,会关闭所有已连接socket", w5500Static},
@@ -760,11 +759,11 @@ static int w5500Help(int argc, char *argv[])
     return 0;
 }
 
-static int RyanMqttMsh(int argc, char *argv[])
+static int RyanW5500Msh(int argc, char *argv[])
 {
     int32_t i = 0,
             result = 0;
-    struct RyanMqttCmdDes *runCmd = NULL;
+    struct RyanW5500CmdDes *runCmd = NULL;
 
     if (argc == 1)
     {
@@ -807,7 +806,7 @@ static int RyanMqttMsh(int argc, char *argv[])
 // INIT_DEVICE_EXPORT(RyanW5500SpiArrach); // spi总线挂载
 
 #if defined(RT_USING_MSH)
-MSH_CMD_EXPORT_ALIAS(RyanMqttMsh, w5500, RyanMqtt command);
+MSH_CMD_EXPORT_ALIAS(RyanW5500Msh, w5500, RyanW5500 command);
 #endif
 
 #endif
