@@ -52,6 +52,8 @@ extern "C"
         struct sockaddr *remoteAddr;       // 远程地址
         RyanW5500ServiceInfo *serviceInfo; // 服务器套接字信息
 
+        rt_mutex_t recvLock; // 读取数据锁
+
 #ifdef SAL_USING_POSIX
         rt_wqueue_t wait_head;
 #endif

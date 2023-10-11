@@ -152,6 +152,7 @@ static void wizIntDataTask(void *parameter)
     {
 
         RyanW5500Reset(); // 重启w5500
+        delay(100);
 
         // 超时中断触发为retry_cnt * time_100us * 100us
         struct wiz_NetTimeout_t net_timeout = {
@@ -160,13 +161,11 @@ static void wizIntDataTask(void *parameter)
         ctlnetwork(CN_SET_TIMEOUT, (void *)&net_timeout);
 
         memset(&net_timeout, 0, sizeof(struct wiz_NetTimeout_t));
-
         ctlnetwork(CN_GET_TIMEOUT, (void *)&net_timeout);
         if (5 == net_timeout.retry_cnt && 2000 == net_timeout.time_100us)
             break;
 
         rlog_e("没有监测到w5500");
-
         delay(2000);
     }
     netdev_low_level_set_status(netdev, RT_TRUE); // 设置网络接口设备状态

@@ -76,8 +76,8 @@ extern "C"
     if (!(EX))                                                     \
     {                                                              \
                                                                    \
-        Ryanlevel("ErrorCode: %d, strError: %s",                   \
-                  ErrorCode, RyanW5500StrError(ErrorCode));        \
+        Ryanlevel("ErrorCode: %d, strError: %d",                   \
+                  ErrorCode, (ErrorCode));                         \
         errno = (ErrorCode);                                       \
         {code};                                                    \
     }

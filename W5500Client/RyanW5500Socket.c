@@ -51,10 +51,12 @@ int RyanW5500CloseCallback(int socket)
     RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
     sock->state = RyanW5500SocketClose;
-    rt_event_send(RyanW5500Entry.W5500EventHandle, 1 << sock->socket);
 
     RyanW5500DoEventChanges(sock, WIZ_EVENT_RECV, RT_TRUE);
     RyanW5500DoEventChanges(sock, WIZ_EVENT_ERROR, RT_TRUE);
+
+    rt_event_send(RyanW5500Entry.W5500EventHandle, 1 << sock->socket);
+
     return 0;
 }
 
@@ -211,8 +213,13 @@ static int RyanW5500SocketDestory(RyanW5500Socket *sock)
     RT_ASSERT(NULL != sock);
 
     rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); //
+    rlog_i("销毁套接字");
+
     if (sock->magic != WIZ_SOCKET_MAGIC)
         goto next;
+
+    if (sock->recvLock)
+        rt_mutex_delete(sock->recvLock);
 
     if (sock->remoteAddr)
         free(sock->remoteAddr);
@@ -278,7 +285,7 @@ RyanW5500Socket *RyanW5500SocketCreate(int type, int port)
     // 没有空闲socket
     RyanW5500CheckCode(RyanW5500MaxSocketNum != idx, EMFILE, rlog_d, {
                         rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
-                        goto err; });
+                       goto err; });
 
     sock = &(RyanW5500Sockets[idx]);
     sock->magic = WIZ_SOCKET_MAGIC;
@@ -292,23 +299,34 @@ RyanW5500Socket *RyanW5500SocketCreate(int type, int port)
     sock->serviceInfo = NULL; // 用于服务器套接字
     sock->serviceSocket = -1;
 
-    rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
-
-    setSn_IR(sock->socket, 0xff);              // 清空套接字中断
-    setSn_IMR(sock->socket, RyanW5500SnIMR);   // 设置套接字ISR状态支持
-    wiz_recv_ignore(sock->socket, UINT16_MAX); // 清空之前的接收缓存
+    // 创建接收锁
+    char name[32] = {0};
+    rt_snprintf(name, sizeof(name), "%s%d", "w5500_sr", idx);
+    sock->recvLock = rt_mutex_create(name, RT_IPC_FLAG_FIFO);
+    if (RT_NULL == sock->recvLock)
+    {
+        rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
+        goto err;
+    }
 
 #ifdef SAL_USING_POSIX
     rt_wqueue_init(&sock->wait_head);
 #endif
 
+    setSn_IR(sock->socket, 0xff);              // 清空套接字中断
+    setSn_IMR(sock->socket, RyanW5500SnIMR);   // 设置套接字ISR状态支持
+    wiz_recv_ignore(sock->socket, UINT16_MAX); // 清空之前的接收缓存
+
     int8_t result = wizchip_socket(sock->socket, sock->type, sock->port, 0); // wizchip_socket内部会先close一次
     if (result != sock->socket)
     {
         rlog_e("RyanW5500 socket(%d) create failed!  result: %d", sock->socket, result);
+        rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
         goto err;
     }
 
+    sock->state = RyanW5500SocketInit;
+    rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
     return sock;
 
 err:
@@ -481,11 +499,9 @@ int wiz_socket(int domain, int type, int protocol)
     }
 
     // 分配并初始化一个新的 WIZnet 套接字
+    wiz_port++;
     sock = RyanW5500SocketCreate(type, wiz_port);
     RyanW5500CheckCode(NULL != sock, EMFILE, rlog_d, { return -1; });
-
-    sock->state = RyanW5500SocketInit;
-    wiz_port++;
 
     return sock->socket;
 }
@@ -609,7 +625,6 @@ int wiz_listen(int socket, int backlog)
     RyanW5500LinkCheck(-1);
 
     RyanW5500Socket *sock = RyanW5500GetSock(socket);
-
     RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; }); // 套接字参数不是有效的文件描述符。
     RyanW5500CheckCode(WIZ_SOCKET_MAGIC == sock->magic, EIO, rlog_d, { return -1; });
     RyanW5500CheckCode(RyanW5500SocketEstablished != sock->state, EINVAL, rlog_d, { return -1; }); // 套接字已连接
@@ -664,7 +679,6 @@ int wiz_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
     RyanW5500CheckCode(NULL != addr && 0 != addrlen, EAFNOSUPPORT, rlog_d, { return -1; }); // 非法地址
 
     RyanW5500Socket *serviceSock = RyanW5500GetSock(socket);
-
     RyanW5500CheckCode(NULL != serviceSock, EBADF, rlog_d, { return -1; }); // 套接字参数不是有效的文件描述符。
     RyanW5500CheckCode(WIZ_SOCKET_MAGIC == serviceSock->magic, EIO, rlog_d, { return -1; });
     RyanW5500CheckCode(RyanW5500SocketListen == serviceSock->state, EINVAL, rlog_d, { return -1; }); // 套接字不接受连接，没有listen
@@ -752,7 +766,7 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
         sendLen = wizchip_send(socket, (uint8_t *)data, sendLen);
         if (sendLen < 0)
         {
-            rlog_e("udp send fail, result: %d", sendLen);
+            rlog_e("tcp send fail, result: %d", sendLen);
             RyanW5500DoEventChanges(sock, WIZ_EVENT_ERROR, RT_TRUE);
             RyanW5500CheckCode(SOCKERR_SOCKCLOSED == sendLen, EPIPE, rlog_d, { return 0; }); // 套接字被关闭
             return -1;
@@ -841,7 +855,8 @@ int wiz_recvfrom(int socket, void *mem, size_t len, int flags, struct sockaddr *
 
 again:
     // 判断是否超时
-    RyanW5500CheckCode(0 != platformTimerRemain(&recvTimer), EAGAIN, rlog_d, { result = -1; goto __exit; });
+    timeout = platformTimerRemain(&recvTimer);
+    RyanW5500CheckCode(0 != timeout, EAGAIN, rlog_d, { result = -1; goto __exit; });
 
     switch (sock->type)
     {
@@ -851,7 +866,9 @@ again:
         recvLen = getSn_RX_RSR(socket);
         if (recvLen > 0)
         {
+            rt_mutex_take(sock->recvLock, RT_WAITING_FOREVER);
             recvLen = wizchip_recv(socket, mem, len);
+            rt_mutex_release(sock->recvLock);
             if (recvLen > 0)
                 goto __exit;
         }
@@ -869,7 +886,9 @@ again:
         if (getSn_RX_RSR(socket) <= 0)
             goto again;
 
+        rt_mutex_take(sock->recvLock, RT_WAITING_FOREVER);
         recvLen = wizchip_recv(socket, mem, len);
+        rt_mutex_release(sock->recvLock);
         if (recvLen < 0)
         {
             rlog_e("recv error, result: %d", recvLen);
@@ -904,7 +923,9 @@ again:
         if (recvLen > len)
             recvLen = len;
 
+        rt_mutex_take(sock->recvLock, RT_WAITING_FOREVER);
         recvLen = wizchip_recvfrom(socket, mem, recvLen, remoteIp, &remotePort);
+        rt_mutex_release(sock->recvLock);
         if (recvLen < 0)
         {
             RyanW5500CheckCode(SOCKERR_SOCKCLOSED == recvLen, ECONNRESET, rlog_d, { result = 0; goto __exit; }); // 套接字被关闭
@@ -974,7 +995,6 @@ int wiz_recv(int socket, void *mem, size_t len, int flags)
 int wiz_closesocket(int socket)
 {
     RyanW5500Socket *sock = NULL;
-
     sock = RyanW5500GetSock(socket);
     RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
 
@@ -1349,9 +1369,12 @@ int RyanW5500_gethostbyname(const char *name, ip_addr_t *addr)
         uint8_t remote_ip[4] = {0};
         uint8_t data_buffer[512];
 
-        rlog_w("开始获取dns");
+        // rlog_w("开始获取dns");
+
         // DNS客户端处理
+        rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); // 获取互斥锁
         ret = DNS_run(gWIZNETINFO.dns, (uint8_t *)name, remote_ip, data_buffer);
+        rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
         if (1 != ret)
         {
             if (-1 == ret)
@@ -1434,8 +1457,6 @@ struct hostent *wiz_gethostbyname(const char *name)
 
     return &s_hostent;
 }
-
-// 看以后要不要实现了
 
 /**
  * @brief wiz_gethostbyname 线程安全版本
