@@ -84,10 +84,18 @@ static int RyanW5500NetdevSetDnsServer(struct netdev *netdev, uint8_t dns_num, i
 static int RyanW5500NetdevSetDhcp(struct netdev *netdev, rt_bool_t is_enabled)
 {
 
-    RyanW5500Entry.netDevFlag |= netDevDHCP;
+    if (is_enabled)
+    {
+        RyanW5500Entry.netDevFlag |= netDevDHCPEnable;
+        RyanW5500Entry.netDevFlag &= ~netDevDHCPDisable;
+    }
+    else
+    {
+        RyanW5500Entry.netDevFlag |= netDevDHCPDisable;
+        RyanW5500Entry.netDevFlag &= ~netDevDHCPEnable;
+    }
 
     netdev_low_level_set_dhcp_status(netdev, is_enabled);
-    netdev_low_level_set_link_status(netdev, RT_FALSE);
     return RT_EOK;
 }
 

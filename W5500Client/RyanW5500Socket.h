@@ -92,8 +92,6 @@ extern "C"
     extern int RyanW5500RecvDataCallback(int socket);
     extern int RyanW5500CloseCallback(int socket);
 
-    extern void RyanW5500DoEventChanges(RyanW5500Socket *sock, RyanW5500Event_e event, rt_bool_t is_plus);
-
 #ifdef __cplusplus
 }
 #endif

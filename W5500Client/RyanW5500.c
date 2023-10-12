@@ -26,7 +26,7 @@ void RyanW5500NetDevInfoUpdate(struct netdev *netdev)
     netdev_low_level_set_dns_server(netdev, 0, (const ip_addr_t *)&netinfo.dns); // 设置网络接口设备DNS服务器地址
     memcpy(netdev->hwaddr, (const void *)&netinfo.mac, netdev->hwaddr_len);      // 设置mac地址
 
-    netdev_low_level_set_dhcp_status(netdev, (NETINFO_DHCP == gWIZNETINFO.dhcp) ? RT_TRUE : RT_FALSE);
+    // netdev_low_level_set_dhcp_status(netdev, (NETINFO_DHCP == gWIZNETINFO.dhcp) ? RT_TRUE : RT_FALSE);
 
     ctlwizchip(CW_GET_PHYLINK, &linkState);
     netdev_low_level_set_link_status(netdev, (PHY_LINK_ON == linkState) ? RT_TRUE : RT_FALSE);
@@ -42,60 +42,81 @@ int RyanW5500NetWorkInit(struct netdev *netdev)
 {
 
     uint8_t MaintainFlag = 0; // dhcp续租标志
-
-    // nedev用户手动设置了ip / gw / mask / dnsService
-    if (RyanW5500Entry.netDevFlag & netDevSetDevInfo)
-    {
-        RyanW5500Entry.netDevFlag &= ~netDevSetDevInfo;
-        for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
-            wiz_closesocket(socket);
-
-        goto next;
-    }
-
-    // nedev用户使能了dhcp
-    if (RyanW5500Entry.netDevFlag & netDevDHCP)
-    {
-        RyanW5500Entry.netDevFlag &= ~netDevDHCP;
-        for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
-            wiz_closesocket(socket);
-
-        MaintainFlag = 0;
-        goto next;
-    }
-
-    // dhcp租期判断
-    if (NETINFO_DHCP == gWIZNETINFO.dhcp)
-    {
-        if (getDHCPRemainLeaseTime() < 10 * 1000) // 如果租期只剩余10秒，重新获取ip
-        {
-            rlog_i("dhcp租期接近超时, 重新获取ip");
-            MaintainFlag = 0;
-            goto next;
-        }
-
-        if (getDHCPRemainLeaseTime() < (getDHCPLeaseTime() / 2)) // 超过一半就开始续租
-        {
-            rlog_i("dhcp续租");
-            MaintainFlag = 1;
-            goto next;
-        }
-    }
-
     uint8_t linkState = 0;
-    ctlwizchip(CW_GET_PHYLINK, &linkState);
-    if (PHY_LINK_ON == linkState && netdev_is_link_up(netdev)) // netdev状态和设备状态匹配,不进行下面操作
-        return 0;
 
-    if (PHY_LINK_ON == linkState) // w5500处于link状态，更新信息后就退出
+    if (0 != RyanW5500Entry.netDevFlag)
     {
-        rlog_d("link State: %d\r\n", linkState);
-        RyanW5500NetDevInfoUpdate(netdev);
-        return 0;
+        // nedev用户手动设置了ip / gw / mask / dnsService
+        if (RyanW5500Entry.netDevFlag & netDevSetDevInfo)
+        {
+            RyanW5500Entry.netDevFlag &= ~netDevSetDevInfo;
+            for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
+                wiz_closesocket(socket);
+        }
+
+        // nedev用户使能了dhcp
+        if (RyanW5500Entry.netDevFlag & netDevDHCPEnable)
+        {
+            RyanW5500Entry.netDevFlag &= ~netDevDHCPEnable;
+
+            MaintainFlag = 0;
+            gWIZNETINFO.dhcp = NETINFO_DHCP;
+
+            // 模式不一样，关闭所有socket
+            if (gWIZNETINFO.dhcp != NETINFO_DHCP)
+            {
+                for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
+                    wiz_closesocket(socket);
+            }
+        }
+
+        // nedev用户失能了dhcp
+        if (RyanW5500Entry.netDevFlag & netDevDHCPDisable)
+        {
+            RyanW5500Entry.netDevFlag &= ~netDevDHCPDisable;
+
+            MaintainFlag = 0;
+            gWIZNETINFO.dhcp = NETINFO_STATIC;
+
+            // ip可能不一样，直接关闭所有socket
+            for (uint8_t socket = 0; socket < RyanW5500MaxSocketNum; socket++)
+                wiz_closesocket(socket);
+        }
+    }
+    else
+    {
+
+        // dhcp租期判断
+        if (NETINFO_DHCP == gWIZNETINFO.dhcp)
+        {
+            if (getDHCPRemainLeaseTime() < 10 * 1000) // 如果租期只剩余10秒，重新获取ip
+            {
+                rlog_i("dhcp租期接近超时, 重新获取ip");
+                MaintainFlag = 0;
+                goto next;
+            }
+
+            if (getDHCPRemainLeaseTime() < (getDHCPLeaseTime() / 2)) // 超过一半就开始续租
+            {
+                rlog_i("dhcp续租");
+                MaintainFlag = 1;
+                goto next;
+            }
+        }
+
+        ctlwizchip(CW_GET_PHYLINK, &linkState);
+        if (PHY_LINK_ON == linkState && netdev_is_link_up(netdev)) // netdev状态和设备状态匹配,不进行下面操作
+            return 0;
+
+        if (PHY_LINK_ON == linkState) // w5500处于link状态，更新信息后就退出
+        {
+            rlog_d("link State: %d\r\n", linkState);
+            RyanW5500NetDevInfoUpdate(netdev);
+            return 0;
+        }
     }
 
 next:
-    gWIZNETINFO.dhcp = netdev_is_dhcp_enabled(netdev) ? NETINFO_DHCP : NETINFO_STATIC;
     if (NETINFO_DHCP == gWIZNETINFO.dhcp)
     {
         if (0 == MaintainFlag)
@@ -260,11 +281,13 @@ int RyanW5500Init(wiz_NetInfo *netInfo)
     reg_wizchip_spiburst_cbfunc(RyanW5500ReadBurst, RyanW5500WriteBurst);   // 注册多个字节读写
 
     RyanW5500Entry.socketMutexHandle = rt_mutex_create("RyanW5500SocketMutex", RT_IPC_FLAG_FIFO);
+    RyanW5500Entry.dnsMutexHandle = rt_mutex_create("RyanW5500DnsMutex", RT_IPC_FLAG_FIFO);
     RyanW5500Entry.W5500EventHandle = rt_event_create("RyanW5500Event", RT_IPC_FLAG_PRIO);
     RyanW5500AttachIRQ(RyanW5500IRQCallback); // 绑定w5500中断回调函数
 
-    netdev = RyanW5500NetdevRegister("RyanW5500"); // W5500
-    netdev_low_level_set_status(netdev, RT_FALSE); // 设置网络接口设备状态
+    netdev = RyanW5500NetdevRegister("RyanW5500");                                                     // W5500
+    netdev_low_level_set_status(netdev, RT_FALSE);                                                     // 设置网络接口设备状态
+    netdev_low_level_set_dhcp_status(netdev, (NETINFO_DHCP == gWIZNETINFO.dhcp) ? RT_TRUE : RT_FALSE); // 同步dhcp状态
 
     RyanW5500Entry.w5500TaskHandle = rt_thread_create("RyanW5500",    // 线程name
                                                       wizIntDataTask, // 线程入口函数

@@ -62,8 +62,9 @@ extern "C"
 #endif
 
 #define RyanW5500MaxSocketNum (_WIZCHIP_SOCK_NUM_)
-#define netDevDHCP (1 << 2)
-#define netDevSetDevInfo (1 << 3)
+#define netDevDHCPEnable (1 << 2)
+#define netDevDHCPDisable (1 << 3)
+#define netDevSetDevInfo (1 << 4)
 
 // event标志
 // 前8bit用于socket通道数据解析
@@ -96,6 +97,7 @@ extern "C"
         uint32_t netDevFlag;          // netdev用flag
         rt_event_t W5500EventHandle;  // 事件标志组，用于中断通知和socket状态通知
         rt_mutex_t socketMutexHandle; // socket锁
+        rt_mutex_t dnsMutexHandle;    // dns解析锁
         rt_thread_t w5500TaskHandle;  // W5500线程
     } RyanW5500Entry_t;
 
