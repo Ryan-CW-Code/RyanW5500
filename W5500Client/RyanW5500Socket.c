@@ -231,19 +231,19 @@ static RyanW5500Socket *RyanW5500CreateListenClient(RyanW5500Socket *serviceSock
     RyanW5500Socket *clientSock = NULL;
     RyanW5500ClientInfo *clientInfo = NULL;
     clientSock = RyanW5500SocketCreate(serviceSock->type, serviceSock->port);
-    RyanW5500CheckCode(NULL != clientSock, EMFILE, rlog_d, { goto err; });
+    RyanW5500CheckCodeNoReturn(NULL != clientSock, EMFILE, rlog_d, { goto err; });
 
     clientSock->serviceSocket = serviceSock->socket;
 
     // 创建客户端信息并将客户端添加到服务器clientList
     clientInfo = (RyanW5500ClientInfo *)malloc(sizeof(RyanW5500ClientInfo));
-    RyanW5500CheckCode(NULL != clientInfo, ENOMEM, rlog_d, { goto err; });
+    RyanW5500CheckCodeNoReturn(NULL != clientInfo, ENOMEM, rlog_d, { goto err; });
     memset(clientInfo, 0, sizeof(RyanW5500ClientInfo));
 
     clientInfo->sock = clientSock;
     RyanListAddTail(&clientInfo->list, &serviceSock->serviceInfo->clientList);
 
-    RyanW5500CheckCode(SOCK_OK == wizchip_listen(clientSock->socket), EPROTO, rlog_d, { wiz_closesocket(clientSock->socket); goto err; });
+    RyanW5500CheckCodeNoReturn(SOCK_OK == wizchip_listen(clientSock->socket), EPROTO, rlog_d, { wiz_closesocket(clientSock->socket); goto err; });
     clientSock->state = RyanW5500SocketListen;
 
     return clientSock;
@@ -375,7 +375,7 @@ RyanW5500Socket *RyanW5500SocketCreate(int type, int port)
         ;
 
     // 没有空闲socket
-    RyanW5500CheckCode(RyanW5500MaxSocketNum != idx, EMFILE, rlog_d, {
+    RyanW5500CheckCodeNoReturn(RyanW5500MaxSocketNum != idx, EMFILE, rlog_d, {
                         rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
                        goto err; });
 
