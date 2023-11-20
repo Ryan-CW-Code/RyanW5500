@@ -751,7 +751,8 @@ int wiz_sendto(int socket, const void *data, size_t size, int flags, const struc
     sock = RyanW5500GetSock(socket);
     RyanW5500CheckCode(NULL != sock, EBADF, rlog_d, { return -1; });
     RyanW5500CheckCode(WIZ_SOCKET_MAGIC == sock->magic, EIO, rlog_d, { return -1; });
-    RyanW5500CheckCode(RyanW5500SocketEstablished == sock->state, EIO, rlog_d, { return -1; });
+    // tcp 时由 getSn_SR 校验连接状态
+    // RyanW5500CheckCode(RyanW5500SocketEstablished == sock->state, EIO, rlog_d, { return -1; });
 
     switch (sock->type)
     {
