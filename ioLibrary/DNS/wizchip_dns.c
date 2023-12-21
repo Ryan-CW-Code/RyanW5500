@@ -493,7 +493,7 @@ int8_t DNS_run(uint8_t *dns_ip, uint8_t *name, uint8_t *ip_from_dns, uint8_t *bu
         if (retry_count >= MAX_DNS_RETRY)
         {
             rlog_d("> DNS Server is not responding : %d.%d.%d.%d", dns_ip[0], dns_ip[1], dns_ip[2], dns_ip[3]);
-            wizchip_close(DNS_SOCKET);
+            wiz_closesocket(DNS_SOCKET);
             return 0; // timeout occurred
         }
 

@@ -73,6 +73,7 @@ static int w5500Start(int argc, char *argv[])
     inet_pton(AF_INET, "192.168.1.1", &ipStrArr);
     memcpy(netInfo.gw, ipStrArr, 4);
 
+    // inet_pton(AF_INET, "192.168.1.1", &ipStrArr);
     inet_pton(AF_INET, "114.114.114.114", &ipStrArr);
     memcpy(netInfo.dns, ipStrArr, 4);
 

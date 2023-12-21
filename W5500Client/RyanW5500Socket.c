@@ -1,7 +1,7 @@
-#define rlogEnable 1             // 是否使能日志
-#define rlogColorEnable 1        // 是否使能日志颜色
-#define rlogLevel (rlogLvlDebug) // 日志打印等级
-#define rlogTag "W5500Socket"    // 日志tag
+#define rlogEnable 1               // 是否使能日志
+#define rlogColorEnable 1          // 是否使能日志颜色
+#define rlogLevel (rlogLvlWarning) // 日志打印等级
+#define rlogTag "W5500Socket"      // 日志tag
 
 #include "RyanW5500Store.h"
 
