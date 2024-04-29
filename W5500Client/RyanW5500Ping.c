@@ -183,8 +183,8 @@ int RyanW5500Ping(struct netdev *netdev, const char *host, size_t data_len, uint
     // 设置套接字ICMP协议
     IINCHIP_WRITE(Sn_PROTO(socket), IPPROTO_ICMP);
 
-    struct timeval timeout = {.tv_sec = times,
-                              .tv_usec = times % 1000 * 1000};
+    struct timeval timeout = {.tv_sec = times / RT_TICK_PER_SECOND,
+                              .tv_usec = times % RT_TICK_PER_SECOND * 1000000 / RT_TICK_PER_SECOND};
 
     // 设置接收和发送超时选项
     wiz_setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout, sizeof(timeout));
