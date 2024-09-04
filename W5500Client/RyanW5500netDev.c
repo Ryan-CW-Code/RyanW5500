@@ -109,7 +109,13 @@ static int RyanW5500NetdevSetDhcp(struct netdev *netdev, rt_bool_t is_enabled)
  * @param ping_resp
  * @return int
  */
-static int RyanW5500NetdevPing(struct netdev *netdev, const char *host, size_t data_len, uint32_t timeout, struct netdev_ping_resp *ping_resp)
+//    int (*ping)(struct netdev *netdev, const char *host, size_t data_len, uint32_t timeout, struct netdev_ping_resp *ping_resp, rt_bool_t isbind);
+static int RyanW5500NetdevPing(struct netdev *netdev, const char *host, size_t data_len, uint32_t timeout, struct netdev_ping_resp *ping_resp
+#if RT_VER_NUM >= 0x50100
+                               ,
+                               rt_bool_t is_bind
+#endif
+)
 {
     RT_ASSERT(netdev);
     RT_ASSERT(host);

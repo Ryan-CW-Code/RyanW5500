@@ -3,19 +3,26 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <errno.h>
 
-#include <board.h>
+#include <sys/socket.h>
+#include <sys/errno.h>
+#include <netdb.h>
+
 #include <rtthread.h>
 #include <rtdevice.h>
 #include <rtdbg.h>
+#include <board.h>
+
 #include "netdev_ipaddr.h"
 #include "netdev.h"
-#include "netdb.h"
-#include "sys/socket.h"
-#include "sal_socket.h"
-#include "sal_netdb.h"
+
+#include "drv_gpio.h"
 #include "drv_spi.h"
+
+#define rlogEnable              // 是否使能日志
+#define rlogColorEnable         // 是否使能日志颜色
+#define rlogLevel (rlogLvlInfo) // 日志打印等级
+#define rlogTag "W5500Test"     // 日志tag
 
 #include "RyanW5500.h"
 #include "RyanW5500Log.h"
@@ -26,12 +33,11 @@ static struct netdev *RyanNetdev = NULL;
 
 static void neDevStatusChangeCallback(struct netdev *netdev, enum netdev_cb_type type)
 {
-    rlog_i("w5500 nedev state: %d, threadName: %s", type, rt_thread_self()->name);
+    rlog_i("w5500 nedev state: %d", type);
 }
 
 static int w5500Start(int argc, char *argv[])
 {
-
     if (NULL != RyanNetdev)
     {
         rlog_w("w5500已经启动,不要重复选择");
@@ -45,7 +51,7 @@ static int w5500Start(int argc, char *argv[])
     // mac地址首位偶数单播，首位奇数为多播地址,多播作为设备地址是无效(第48bit 0 单播， 1 多播)
     // 广播mac地址:FF-FF-FF-FF-FF-FF
     // 第一个字节一般为00
-    uint8_t myMac[6] = {0x00, 0x08, 0xdc, 0x2f, 0x0c, 0x37};
+    uint8_t myMac[6] = {0x00, 0x08, 0xdc, 0x2f, 0x0c, 0x39};
 
     // stm32可以使用唯一96Bit芯片序列号
     // myMac[3] = *(uint8_t *)(UID_BASE + 0);
@@ -73,8 +79,8 @@ static int w5500Start(int argc, char *argv[])
     inet_pton(AF_INET, "192.168.1.1", &ipStrArr);
     memcpy(netInfo.gw, ipStrArr, 4);
 
-    // inet_pton(AF_INET, "192.168.1.1", &ipStrArr);
-    inet_pton(AF_INET, "114.114.114.114", &ipStrArr);
+    inet_pton(AF_INET, "192.168.1.1", &ipStrArr);
+    // inet_pton(AF_INET, "114.114.114.114", &ipStrArr);
     memcpy(netInfo.dns, ipStrArr, 4);
 
     netInfo.dhcp = NETINFO_DHCP; // 使能dhcp
@@ -307,7 +313,7 @@ static int w5500Static(int argc, char *argv[])
     netdev_dhcp_enabled(RyanNetdev, RT_FALSE);
 
     //  设置网卡 IP 地址
-    uint32_t addr = inet_addr("192.168.8.69");
+    uint32_t addr = inet_addr("192.168.3.69");
     netdev_set_ipaddr(RyanNetdev, (const ip_addr_t *)&addr);
 
     addr = inet_addr("192.168.1.1");
@@ -796,15 +802,20 @@ static int RyanW5500Msh(int argc, char *argv[])
 // stm32用户需要更改此代码为自己w5500实际挂载的spi总线
 // 非stm32用户可以调用rt_spi_bus_attach_device，
 // 参考连接:https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/spi/spi?id=%e6%8c%82%e8%bd%bd-spi-%e8%ae%be%e5%a4%87
-// static int RyanW5500SpiArrach(void)
-//{
-//    rt_err_t result = rt_hw_spi_device_attach("spi2", RYANW5500_SPI_DEVICE, GPIOE, GPIO_PIN_15);
-//    if (RT_EOK != result)
-//        rt_kprintf("RyanW5500 SPI init fail!!!!!");
-//
-//    return result;
-//}
-// INIT_DEVICE_EXPORT(RyanW5500SpiArrach); // spi总线挂载
+static int RyanW5500SpiArrach(void)
+{
+#if (RT_VER_NUM >= 50000)
+    rt_err_t result = rt_hw_spi_device_attach("spi1", RYANW5500_SPI_DEVICE, GET_PIN(A, 7));
+#else
+    rt_err_t result = rt_hw_spi_device_attach("spi1", RYANW5500_SPI_DEVICE, GPIOA, GPIO_PIN_7);
+#endif
+
+    if (RT_EOK != result)
+        rt_kprintf("RyanW5500 SPI init fail!!!!!");
+
+    return result;
+}
+INIT_DEVICE_EXPORT(RyanW5500SpiArrach); // spi总线挂载
 
 #if defined(RT_USING_MSH)
 MSH_CMD_EXPORT_ALIAS(RyanW5500Msh, w5500, RyanW5500 command);

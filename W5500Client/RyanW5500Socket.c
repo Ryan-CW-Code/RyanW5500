@@ -1,5 +1,5 @@
-#define rlogEnable 1               // 是否使能日志
-#define rlogColorEnable 1          // 是否使能日志颜色
+#define rlogEnable                 // 是否使能日志
+#define rlogColorEnable            // 是否使能日志颜色
 #define rlogLevel (rlogLvlWarning) // 日志打印等级
 #define rlogTag "W5500Socket"      // 日志tag
 
@@ -11,12 +11,20 @@
         uint8_t linkState = 0;                  \
         ctlwizchip(CW_GET_PHYLINK, &linkState); \
         if (PHY_LINK_ON != linkState)           \
+        {                                       \
+            rt_set_errno(EHOSTUNREACH);         \
             return value;                       \
+        }                                       \
     } while (0);
 
 // 可用套接字的全局数组
-static volatile RyanW5500Socket RyanW5500Sockets[RyanW5500MaxSocketNum] = {0};
-static volatile uint16_t wiz_port = 15500; // 用户可以自定义
+static RyanW5500Socket RyanW5500Sockets[RyanW5500MaxSocketNum] = {0};
+static uint16_t wiz_port = 15500; // 用户可以自定义
+
+static int _isalpha(char ch)
+{
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
+}
 
 /**
  * @brief
@@ -1360,7 +1368,7 @@ static int RyanW5500_gethostbyname(const char *name, ip_addr_t *addr)
     char ipStrArr[16] = {0};
 
     // 检查域名 / ip地址
-    for (idx = 0; idx < nameLen && !isalpha(name[idx]); idx++)
+    for (idx = 0; idx < nameLen && !_isalpha(name[idx]); idx++)
         ;
 
     // 输入名称为ip地址

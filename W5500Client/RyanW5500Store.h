@@ -11,29 +11,26 @@ extern "C"
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include <errno.h>
 
-#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/errno.h>
 #include <sys/time.h>
+#include <netdb.h>
 
 #include <rtthread.h>
-#include <rthw.h>
-#include <rtdevice.h>
 
-#include <sal_socket.h>
-#include <sal_netdb.h>
-#if (RTTHREAD_VERSION > 40100)
+#if (RT_VER_NUM > 40100)
 #include <sal_low_lvl.h>
 #else
 #include <sal.h>
 #endif
 
+#include "netdev_ipaddr.h"
+#include "netdev.h"
+
 #ifdef SAL_USING_POSIX
 #include <poll.h>
 #endif
-
-#include "netdev_ipaddr.h"
-#include "netdev.h"
 
 #include "RyanList.h"
 #include "RyanW5500Log.h"
@@ -79,7 +76,7 @@ extern "C"
                                                                    \
         Ryanlevel("ErrorCode: %d, strError: %d",                   \
                   ErrorCode, (ErrorCode));                         \
-        errno = (ErrorCode);                                       \
+        rt_set_errno(ErrorCode);                                   \
         {code};                                                    \
     }
 
