@@ -697,8 +697,13 @@ int wiz_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
     {
         int8_t clientSocket = -1;
         // 接收客户端连接消息
+#if (RT_VER_NUM < 0x50100)
         if (rt_mq_recv(serviceSock->serviceInfo->clientInfoQueueHandle, (void *)&clientSocket, sizeof(int8_t), RT_WAITING_FOREVER) != RT_EOK)
             continue;
+#else
+        if (rt_mq_recv(serviceSock->serviceInfo->clientInfoQueueHandle, (void *)&clientSocket, sizeof(int8_t), RT_WAITING_FOREVER) > 0)
+            continue;
+#endif
 
         RyanW5500CheckCode(-1 != clientSocket, EPROTO, rlog_d, { return -1; });
 
