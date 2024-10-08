@@ -313,7 +313,7 @@ static int RyanW5500SocketDestory(RyanW5500Socket *sock)
     RT_ASSERT(NULL != sock);
 
     if (sock->magic != WIZ_SOCKET_MAGIC)
-        goto next;
+        return -1;
 
     rlog_d("销毁套接字");
     rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); //
@@ -359,7 +359,6 @@ static int RyanW5500SocketDestory(RyanW5500Socket *sock)
     setSn_IMR(sock->socket, 0);   // 设置套接字ISR状态支持
     memset(sock, 0, sizeof(RyanW5500Socket));
 
-next:
     rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
     return 0;
 }
