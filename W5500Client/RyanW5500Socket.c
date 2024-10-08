@@ -697,7 +697,7 @@ int wiz_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
     {
         int8_t clientSocket = -1;
         // 接收客户端连接消息
-#if (RT_VER_NUM < 0x50100)
+#if (RT_VER_NUM < 0x50001)
         if (rt_mq_recv(serviceSock->serviceInfo->clientInfoQueueHandle, (void *)&clientSocket, sizeof(int8_t), RT_WAITING_FOREVER) != RT_EOK)
             continue;
 #else
