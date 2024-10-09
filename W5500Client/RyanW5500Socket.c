@@ -288,16 +288,16 @@ static void RyanW5500ListenSocketDestory(RyanW5500Socket *sock)
 
         RyanListDel(&clientInfo->list);
 
-        // // 增加listen客户端数
-        // if (0 == serviceSock->serviceInfo->backlog)
-        // {
-        //     RyanW5500Socket *sock = RyanW5500CreateListenClient(serviceSock);
-        //     if (NULL == sock)
-        //     {
-        //         int8_t socket = -1;
-        //         rt_mq_send(serviceSock->serviceInfo->clientInfoQueueHandle, &socket, sizeof(int8_t));
-        //     }
-        // }
+        // 增加listen客户端数
+        if (0 == serviceSock->serviceInfo->backlog)
+        {
+            RyanW5500Socket *sock = RyanW5500CreateListenClient(serviceSock);
+            if (NULL == sock)
+            {
+                int8_t socket = -1;
+                rt_mq_send(serviceSock->serviceInfo->clientInfoQueueHandle, &socket, sizeof(int8_t));
+            }
+        }
 
         // 添加服务器套接字监听数
         serviceSock->serviceInfo->backlog++;
