@@ -287,7 +287,6 @@ static void RyanW5500ListenSocketDestory(RyanW5500Socket *sock)
             continue;
 
         RyanListDel(&clientInfo->list);
-        wiz_closesocket(clientInfo->sock->socket);
 
         // // 增加listen客户端数
         // if (0 == serviceSock->serviceInfo->backlog)
