@@ -308,14 +308,16 @@ static void RyanW5500ListenSocketDestory(RyanW5500Socket *sock)
 
 static int RyanW5500SocketDestory(RyanW5500Socket *sock)
 {
-
     RT_ASSERT(NULL != sock);
-
-    if (sock->magic != WIZ_SOCKET_MAGIC)
-        return -1;
 
     rlog_d("销毁套接字");
     rt_mutex_take(RyanW5500Entry.socketMutexHandle, RT_WAITING_FOREVER); //
+
+    if (sock->magic != WIZ_SOCKET_MAGIC)
+    {
+        rt_mutex_release(RyanW5500Entry.socketMutexHandle); // 释放互斥锁
+        return -1;
+    }
 
     if (sock->recvLock)
         rt_mutex_delete(sock->recvLock);
